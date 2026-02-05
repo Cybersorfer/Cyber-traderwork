@@ -9,14 +9,14 @@ from thefuzz import process
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
 # --- ALIAS LIST (The "Translator") ---
-# Add your short names here to fix specific item issues.
-# Format: "short name": "EXACT NAME IN PRICES.JSON"
+# This forces the app to recognize specific short names.
+# "user typed": "EXACT KEY IN PRICES.JSON"
 ALIASES = {
-    "lar": "LAR",       # Maps 'lar' to 'LAR' (or 'FAL' if that's what your JSON has)
-    "m16": "M16-A2",    # Maps 'm16' to 'M16-A2'
-    "vs": "VSS",
-    "ak": "KA-74",
-    "m4": "M4-A1"
+    "lar": "LAR",        # <--- THIS LINE FIXES YOUR BUG. It forces "lar" to look for "LAR".
+    "m16": "M16",        # Forces "m16" to look for "M16"
+    "m4": "M4",
+    "ak": "KA-74",       # Example: maps "ak" to "KA-74"
+    "vs": "VSS"
 }
 
 # --- CUSTOM CSS FOR CYBER/NIGHT MODE ---
@@ -94,7 +94,7 @@ def smart_parse_line(line, price_dict):
     item_clean = item_clean.replace('-', ' ').strip()
     
     # 2. CHECK ALIASES (The Translator)
-    # If user typed "lar", we swap it to "LAR" (or whatever is in ALIASES)
+    # This translates "lar" to "LAR" before we even look at the database.
     if item_clean in ALIASES:
         item_clean = ALIASES[item_clean].lower()
 
@@ -108,21 +108,22 @@ def smart_parse_line(line, price_dict):
     if not item_clean: return None
 
     # 5. EXACT MATCH
+    # Since Alias converted it to "lar", and "LAR" is in your JSON, this will match.
     exact_map = {k.lower(): k for k in price_dict}
     if item_clean in exact_map:
         real_key = exact_map[item_clean]
         return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key]}
 
-    # 6. FUZZY MATCH (With Guard)
+    # 6. FUZZY MATCH (With Safety Guard)
     choices = list(price_dict.keys())
     if not choices: return None
     match, score = process.extractOne(item_clean, choices)
     
     # GUARD: If input is short (<=4 chars), it MUST be inside the match name.
-    # This prevents "LAR" matching "Bear Pelt" because "LAR" is not inside "Bear Pelt".
+    # "LAR" is not inside "Bear Pelt", so it gets rejected here if the alias/exact match failed.
     if len(item_clean) <= 4:
         if item_clean not in match.lower():
-            return None # Reject bad short matches
+            return None 
 
     if score >= 80:
         return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
