@@ -9,13 +9,23 @@ from thefuzz import process
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
 # --- ALIAS LIST ---
+# Maps user inputs (lowercase) to the "Search Term" you want to find.
 ALIASES = {
     "lar": "LAR",       
     "m16": "M16",       
     "m4": "M4-A1",      
     "ak": "KA-74",      
-    "vs": "VSS"
+    "vs": "VSS",
+    "weed": "cannabis seeds" # Added this just in case
 }
+
+# --- JUNK WORD REMOVER ---
+# Words to strip out BEFORE matching to fix length issues
+FILLERS = [
+    "pack of", "packs of", "box of", "can of",
+    "cr550", "item of the week", "for the",
+    "stored in", "inside"
+]
 
 # --- CUSTOM CSS ---
 def set_theme():
@@ -55,9 +65,6 @@ def load_prices():
         return {"WE_BUY": {}, "WE_SELL": {}}
 
 def detect_intent_and_clean(line):
-    """
-    Strips "Want to buy/sell" phrases so we can find the number clearly.
-    """
     line_lower = line.lower()
     intent = "NEUTRAL" 
     
@@ -81,10 +88,11 @@ def detect_intent_and_clean(line):
     return intent, line
 
 def clean_text(text):
+    # Removes special chars but keeps separators
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
 
 def smart_parse_line(line, price_dict):
-    # 0. Pre-Clean: Ignore locker codes
+    # 0. Ignore locker codes
     if "locker code" in line.lower() or "combo" in line.lower():
         return None
 
@@ -95,7 +103,7 @@ def smart_parse_line(line, price_dict):
     quantity = 1
     item_clean = line
 
-    # 2. SEPARATOR LOGIC (Handles 5x, 5-, 5 )
+    # 2. SEPARATOR LOGIC
     match_start = re.match(r'^(\d+)\s*[xX\-\.]?\s*(.*)', line)
     match_end = re.search(r'(.*)\s+[xX\-\.]?\s*(\d+)$', line)
 
@@ -105,20 +113,26 @@ def smart_parse_line(line, price_dict):
     elif match_end:
         quantity = int(match_end.group(2))
         item_clean = match_end.group(1).strip()
-    
-    # 3. Apply Alias
+
+    # 3. FILLER REMOVAL (The Fix for "Pack of Cigarettes")
+    # We remove "pack of", "cr550" etc so the fuzzy matcher sees just "Cigarettes"
+    for filler in FILLERS:
+        item_clean = item_clean.replace(filler, "").strip()
+
+    # 4. Apply Alias
     if item_clean in ALIASES:
         item_clean = ALIASES[item_clean]
         is_aliased = True
     else:
         is_aliased = False
 
-    # 4. Special Item Check
+    # 5. Special Item Check
     if 'special_name' in globals() and special_name and special_name.lower() in item_clean.lower():
-         return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
+        # Ensure promo is actually active before matching
+        if 'special_item_active' in globals() and special_item_active:
+             return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
 
-    # 5. EXACT MATCH
-    # SAFETY: Ensure we don't crash on empty keys
+    # 6. EXACT MATCH
     exact_map = {str(k).lower(): str(k) for k in price_dict if k}
     search_term = item_clean.lower()
     
@@ -126,18 +140,17 @@ def smart_parse_line(line, price_dict):
         real_key = exact_map[search_term]
         return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key]}
 
-    # 6. STOP IF ALIASED
+    # 7. STOP IF ALIASED
     if is_aliased:
         return {"Item": f"❌ MISSING: {item_clean}", "Qty": quantity, "Unit Price": 0, "Total": 0}
 
-    # 7. FUZZY MATCH
-    # SAFETY: Filter choices to ensure they are all Strings (Fixes TypeError)
+    # 8. FUZZY MATCH
     choices = [str(k) for k in price_dict.keys() if k]
     if not choices: return None
     
     match, score = process.extractOne(item_clean, choices)
     
-    # GUARD A: Strict Score (Bumped to 85 for better accuracy)
+    # GUARD A: Base Score
     if score < 85:
         return None
 
@@ -146,17 +159,17 @@ def smart_parse_line(line, price_dict):
         if item_clean.lower() not in match.lower():
             return None 
 
-    # GUARD C: Length Deviation (Anti-Pack of Smokes)
-    # If the user input is significantly longer than the match, it's likely a wrong match.
-    # Ex: "Pack of cannabis seeds" (20 chars) vs "Pack of Smokes" (14 chars).
-    # If diff > 5 chars and score isn't perfect, reject.
-    if len(item_clean) > len(match) + 5 and score < 95:
-        return None
+    # GUARD C: Length Deviation (RELAXED)
+    # Since we stripped fillers, we can be stricter.
+    # But if the score is VERY high (95+), we trust it even if lengths differ.
+    if score < 95:
+        if len(item_clean) > len(match) + 6:
+            return None
 
     return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell):
-    # 1. Split Commas
+    # 1. Normalize commas
     normalized_text = input_text.replace(',', '\n')
     lines = normalized_text.split('\n')
     
@@ -166,10 +179,8 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell):
     for line in lines:
         if not line.strip(): continue
         
-        # 2. Detect Intent & Clean
         intent, cleaned_line = detect_intent_and_clean(line)
         
-        # 3. Route to Correct DB
         target_list = "PAYOUT" 
         if intent == "PLAYER_BUYS":
             target_list = "COST"
@@ -223,7 +234,7 @@ def main():
     
     # Sidebar
     st.sidebar.header("🔥 Item of the Week")
-    global special_name, special_price
+    global special_name, special_price, special_item_active
     special_item_active = st.sidebar.checkbox("Enable Special Price")
     special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
     special_price_val = st.sidebar.text_input("Special Price", value="0")
