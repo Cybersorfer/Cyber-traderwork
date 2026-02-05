@@ -8,6 +8,61 @@ from thefuzz import process
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
+# --- CUSTOM CSS FOR CYBER/NIGHT MODE ---
+def set_theme():
+    st.markdown("""
+    <style>
+        /* Force Dark Background */
+        .stApp {
+            background-color: #0E1117;
+            color: #FAFAFA;
+        }
+        
+        /* Customize Sidebar */
+        section[data-testid="stSidebar"] {
+            background-color: #262730;
+        }
+        
+        /* Cyber Text Areas */
+        .stTextArea textarea {
+            background-color: #1E1E1E !important;
+            color: #00FF00 !important; /* Green Text */
+            border: 1px solid #4CAF50;
+            font-family: 'Courier New', monospace; /* Terminal look */
+        }
+        
+        /* Cyber Buttons */
+        .stButton>button {
+            color: #FAFAFA;
+            background-color: #262730;
+            border: 1px solid #4CAF50;
+            transition: all 0.3s ease;
+        }
+        
+        /* Button Hover Effect */
+        .stButton>button:hover {
+            background-color: #4CAF50;
+            color: #000000;
+            border-color: #00FF00;
+            box-shadow: 0 0 10px #4CAF50; /* Neon Glow */
+        }
+        
+        /* Tables */
+        thead tr th:first-child {display:none}
+        tbody th {display:none}
+        
+        /* Headers */
+        h1, h2, h3 {
+            color: #FAFAFA !important;
+        }
+        
+        /* Success/Metric Text */
+        [data-testid="stMetricValue"] {
+            color: #4CAF50 !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- SIDEBAR: ITEM OF THE WEEK ---
 st.sidebar.header("🔥 Item of the Week")
 st.sidebar.markdown("Set a temporary special price for a specific item.")
@@ -76,7 +131,7 @@ def smart_parse_line(line, price_dict):
         
     match, score = process.extractOne(item_clean, choices)
     
-    # Threshold set to 80 to avoid false positives (e.g. "Stove" matching "Smokes")
+    # Threshold set to 80 to avoid false positives
     if score >= 80:
         price = price_dict[match]
         return {
@@ -105,10 +160,9 @@ def render_tab(df_key, price_dict, type_label):
         else:
             st.warning("No matches found.")
 
-    # Display Table Logic (Safety Check included)
+    # Display Table Logic
     df = st.session_state[df_key]
     if not df.empty and "Item" in df.columns:
-        # Create a copy for formatting to avoid modifying the math data
         formatted_df = df.copy()
         formatted_df["Unit Price"] = formatted_df["Unit Price"].apply(lambda x: f"{x:,}")
         formatted_df["Total"] = formatted_df["Total"].apply(lambda x: f"{x:,}")
@@ -121,6 +175,7 @@ def render_tab(df_key, price_dict, type_label):
 
 # --- MAIN APP ---
 def main():
+    set_theme() # <--- INJECT CUSTOM THEME
     st.title("⚖️ Cyber Trader Economy Suite")
     
     # Show active promo banner
