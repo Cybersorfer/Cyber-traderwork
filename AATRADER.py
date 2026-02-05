@@ -26,14 +26,14 @@ def set_theme():
             color: #FAFAFA !important; /* Force sidebar text white */
         }
         
-        /* 3. Input Labels (The text above boxes) */
+        /* 3. Input Labels */
         .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label {
             color: #E0E0E0 !important;
             font-size: 1rem;
             font-weight: bold;
         }
         
-        /* 4. Input Boxes (The inside part) */
+        /* 4. Input Boxes */
         .stTextArea textarea, .stTextInput input, .stNumberInput input {
             background-color: #1E1E1E !important;
             color: #00FF00 !important; /* Cyber Green Text */
@@ -64,7 +64,24 @@ def set_theme():
             background-color: #262730 !important;
         }
         tbody tr td {
-            color: #E0E0E0 !important; /* Table content light gray */
+            color: #E0E0E0 !important;
+        }
+
+        /* 8. CALENDAR FIX (Date Input Popup) */
+        div[data-baseweb="calendar"] {
+            background-color: #262730 !important; /* Dark background for popup */
+        }
+        div[data-baseweb="calendar"] div {
+            color: #FAFAFA !important; /* White text for days */
+        }
+        div[data-baseweb="calendar"] button:hover {
+            background-color: #4CAF50 !important; /* Green hover */
+            color: #000000 !important;
+        }
+        /* The selected date circle */
+        div[aria-selected="true"] {
+            background-color: #4CAF50 !important;
+            color: #000000 !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -75,8 +92,21 @@ st.sidebar.markdown("Set a temporary special price for a specific item.")
 
 special_item_active = st.sidebar.checkbox("Enable Special Price")
 special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
-special_price = st.sidebar.number_input("Special Price", min_value=0, step=100)
+
+# CHANGED: Replaced Number Input with Text Input to remove +/- buttons
+special_price_input = st.sidebar.text_input("Special Price", value="0")
+
+# Convert text input to integer safely
+try:
+    special_price = int(special_price_input)
+except ValueError:
+    special_price = 0 # Default to 0 if they type letters
+
 expiry_date = st.sidebar.date_input("Offer Ends On", min_value=date.today())
+
+# ADDED: Update Button (Visual confirmation)
+if st.sidebar.button("🔄 Update Promo"):
+    st.rerun()
 
 # Check if offer is expired
 is_expired = date.today() > expiry_date
