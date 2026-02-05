@@ -121,7 +121,7 @@ def smart_parse_line(line, price_dict):
     
     # GUARD: If input is short (<=4 chars), it MUST be inside the match name.
     # "LAR" is not inside "Bear Pelt", so it gets rejected here if the alias/exact match failed.
-    if len(item_clean) <= 3:
+    if len(item_clean) <= 4:
         if item_clean not in match.lower():
             return None 
 
@@ -178,4 +178,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
