@@ -23,7 +23,7 @@ def set_theme():
             background-color: #262730;
         }
         section[data-testid="stSidebar"] * {
-            color: #FAFAFA !important; /* Force sidebar text white */
+            color: #FAFAFA !important;
         }
         
         /* 3. Input Labels */
@@ -33,12 +33,12 @@ def set_theme():
             font-weight: bold;
         }
         
-        /* 4. Input Boxes (Added .stDateInput input to fix the invisible date) */
+        /* 4. Input Boxes */
         .stTextArea textarea, .stTextInput input, .stNumberInput input, .stDateInput input {
             background-color: #1E1E1E !important;
-            color: #00FF00 !important; /* Cyber Green Text */
+            color: #00FF00 !important;
             border: 1px solid #4CAF50;
-            caret-color: #00FF00; /* Green blinking cursor */
+            caret-color: #00FF00;
         }
         
         /* 5. Buttons */
@@ -68,7 +68,7 @@ def set_theme():
             color: #E0E0E0 !important;
         }
 
-        /* 8. CALENDAR FIX (Date Input Popup) */
+        /* 8. CALENDAR FIX */
         div[data-baseweb="calendar"] {
             background-color: #262730 !important;
         }
@@ -93,7 +93,7 @@ st.sidebar.markdown("Set a temporary special price for a specific item.")
 special_item_active = st.sidebar.checkbox("Enable Special Price")
 special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
 
-# Price Input (Text based to remove +/- buttons)
+# Price Input
 special_price_input = st.sidebar.text_input("Special Price", value="0")
 
 try:
@@ -106,7 +106,6 @@ expiry_date = st.sidebar.date_input("Offer Ends On", min_value=date.today())
 if st.sidebar.button("🔄 Update Promo"):
     st.rerun()
 
-# Check if offer is expired
 is_expired = date.today() > expiry_date
 if special_item_active and is_expired:
     st.sidebar.error(f"⚠️ Offer expired on {expiry_date}")
@@ -120,10 +119,6 @@ def load_prices():
         return {"WE_BUY": {}, "WE_SELL": {}}
 
 def smart_parse_line(line, price_dict):
-    """
-    Parses a single line of text to extract quantity and item name.
-    Prioritizes the 'Special Item' over fuzzy matching.
-    """
     line = line.lower().strip()
     
     if not line or len(line) < 2:
@@ -172,6 +167,7 @@ def smart_parse_line(line, price_dict):
 def render_tab(df_key, price_dict, type_label):
     st.subheader(f"📊 {type_label} Calculation")
     
+    # IMPORTANT: We assign a specific key here (e.g., text_buy_df)
     input_text = st.text_area(f"Paste {type_label} list here:", height=150, key=f"text_{df_key}")
     
     if st.button(f"🚀 Process {type_label}", key=f"btn_{df_key}"):
@@ -200,7 +196,7 @@ def render_tab(df_key, price_dict, type_label):
 
 # --- MAIN APP ---
 def main():
-    set_theme() # Apply the new High-Contrast Theme
+    set_theme()
     st.title("⚖️ Cyber Trader Economy Suite")
     
     if special_item_active and not is_expired and special_name:
@@ -223,9 +219,17 @@ def main():
     with tab2:
         render_tab("sell_df", WE_SELL, "Cost")
 
+    # --- UPDATED CLEAR LOGIC ---
     if st.button("🗑️ Clear All"):
+        # 1. Clear Dataframes
         st.session_state.buy_df = pd.DataFrame()
         st.session_state.sell_df = pd.DataFrame()
+        
+        # 2. Force Clear the Text Areas by key
+        # (Streamlit widgets hold state unless explicitly reset)
+        st.session_state["text_buy_df"] = ""
+        st.session_state["text_sell_df"] = ""
+        
         st.rerun()
 
 if __name__ == "__main__":
