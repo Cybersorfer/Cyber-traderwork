@@ -120,7 +120,7 @@ def load_prices():
 def smart_parse_line(line, price_dict):
     """
     Parses a single line. 
-    INCLUDES: Smart Quantity, Exact Match, and Short-Word Safety (Dynamic Threshold).
+    INCLUDES: Smart Quantity, Exact Match, and The Length Guard.
     """
     line = line.lower().strip()
     
@@ -167,32 +167,37 @@ def smart_parse_line(line, price_dict):
         price = price_dict[real_key]
         return {
             "Item": real_key,
-            "Qty": quantity,
-            "Unit Price": price,
+            "Qty": quantity, 
+            "Unit Price": price, 
             "Total": quantity * price
         }
-
-    # 5. FUZZY MATCH (With Safety Net)
+    
+    # 5. FUZZY MATCH with LENGTH GUARD
     choices = list(price_dict.keys())
     if not choices:
         return None
         
     match, score = process.extractOne(item_clean, choices)
     
-    # --- SHORT WORD SAFETY ---
-    # If the word is 3 chars or less (e.g. "LAR"), require 90% match.
-    # Longer words (e.g. "Thermometer") allow 80% for typos.
-    threshold = 85 if len(item_clean) < 4 else 80
-    
-    if score >= threshold:
-        price = price_dict[match]
-        return {
-            "Item": match, 
-            "Qty": quantity, 
-            "Unit Price": price, 
-            "Total": quantity * price
-        }
-    return None
+    # RULE A: Must meet score threshold
+    if score < 80:
+        return None
+
+    # RULE B: THE LENGTH GUARD (Anti-Bear Pelt Logic)
+    # If input is short (<= 4 chars) and match is excessively long (> 2x input), REJECT IT.
+    # Ex: "LAR" (3) vs "Bear Pelt" (9). 9 > 6. REJECTED.
+    # Ex: "M16" (3) vs "M16-A2" (6). 6 > 6? No. ACCEPTED.
+    if len(item_clean) <= 4 and len(match) > len(item_clean) * 2:
+        return None
+
+    # If it survived the guards, return the match
+    price = price_dict[match]
+    return {
+        "Item": match, 
+        "Qty": quantity, 
+        "Unit Price": price, 
+        "Total": quantity * price
+    }
 
 def render_tab(df_key, price_dict, type_label):
     st.subheader(f"📊 {type_label} Calculation")
@@ -258,6 +263,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
