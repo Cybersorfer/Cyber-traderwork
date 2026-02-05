@@ -9,6 +9,7 @@ from thefuzz import process
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
 # --- ALIAS LIST ---
+# Force "lar" to become "LAR", etc.
 ALIASES = {
     "lar": "LAR",       
     "m16": "M16",       
@@ -55,7 +56,7 @@ def load_prices():
         return {"WE_BUY": {}, "WE_SELL": {}}
 
 def clean_text(text):
-    # Removes formatting but KEEPS 'x' and '-' so we can detect '5x'
+    # Removes formatting but KEEPS 'x', '-', and '.' so we can detect them
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
 
 def smart_parse_line(line, price_dict):
@@ -66,21 +67,15 @@ def smart_parse_line(line, price_dict):
     quantity = 1
     item_clean = line
 
-    # 2. QUANTITY DETECTION (Now supports '5x', '5 x', '5-')
-    # Priority A: Explicit "x" format (e.g. "5x bear pelts")
-    # We use search() to skip prefixes like "Want to sell..."
-    match_x = re.search(r'(\d+)\s*[xX]\s+(.*)', line)
+    # 2. UNIVERSAL SEPARATOR LOGIC
+    # This Regex looks for: (Number) + (Optional x, -, or space) + (Item Name)
+    # It handles "5x Item", "5-Item", "5 Item", "5xItem" all the same way.
+    match_start = re.match(r'^(\d+)\s*[xX\-\.]?\s*(.*)', line)
     
-    # Priority B: Standard Start (e.g. "5 bear pelts")
-    match_start = re.match(r'^(\d+)\s+(.*)', line)
-    
-    # Priority C: Standard End (e.g. "bear pelts 5")
-    match_end = re.search(r'(.*)\s+(\d+)$', line)
+    # Check end style: "Item 5x" or "Item 5"
+    match_end = re.search(r'(.*)\s+[xX\-\.]?\s*(\d+)$', line)
 
-    if match_x:
-        quantity = int(match_x.group(1))
-        item_clean = match_x.group(2).strip()
-    elif match_start:
+    if match_start:
         quantity = int(match_start.group(1))
         item_clean = match_start.group(2).strip()
     elif match_end:
@@ -129,8 +124,7 @@ def render_tab(df_key, price_dict, type_label):
     input_text = st.text_area(f"Paste {type_label} list here:", height=150, key=f"text_{df_key}")
     
     if st.button(f"🚀 Process {type_label}", key=f"btn_{df_key}"):
-        # CRITICAL FIX: Split comma-separated lists into new lines!
-        # This handles: "5x bear pelts, 1x kam" -> converts to vertical list
+        # 1. SPLIT COMMAS: Transforms "5x Bear, 2x M4" into separate lines
         normalized_text = input_text.replace(',', '\n')
         
         lines = normalized_text.split('\n')
