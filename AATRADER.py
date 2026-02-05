@@ -56,43 +56,35 @@ def load_prices():
 
 def detect_intent_and_clean(line):
     """
-    Determines if the line is for PAYOUT (User sells) or COST (User buys).
-    Also strips the 'intent' keywords so we can find the quantity easier.
+    Strips "Want to buy/sell" phrases so we can find the number clearly.
     """
     line_lower = line.lower()
-    
-    # default intent is whatever tab we are in, BUT:
-    # If explicitly "buying/ordering", it goes to SELL_DF (Cost to player)
-    # If explicitly "selling", it goes to BUY_DF (Payout to player)
-    
     intent = "NEUTRAL" 
     
-    # Keywords indicating Player wants to BUY (Cost)
+    # 1. Check for BUY (Cost)
     buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need"]
     for kw in buy_keywords:
         if kw in line_lower:
-            intent = "PLAYER_BUYS" # Goes to WE_SELL tab
-            # Strip the keyword to help quantity detection
+            intent = "PLAYER_BUYS"
             line = re.sub(kw, "", line, flags=re.IGNORECASE)
             break
             
-    # Keywords indicating Player wants to SELL (Payout)
+    # 2. Check for SELL (Payout)
     sell_keywords = ["want to sell", "selling", "wts", "i have", "have"]
     if intent == "NEUTRAL":
         for kw in sell_keywords:
             if kw in line_lower:
-                intent = "PLAYER_SELLS" # Goes to WE_BUY tab
+                intent = "PLAYER_SELLS"
                 line = re.sub(kw, "", line, flags=re.IGNORECASE)
                 break
                 
     return intent, line
 
 def clean_text(text):
-    # Removes formatting but KEEPS 'x', '-', and '.'
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
 
 def smart_parse_line(line, price_dict):
-    # 0. Pre-Clean: Remove "locker code" garbage to prevent false matches
+    # 0. Pre-Clean: Ignore locker codes
     if "locker code" in line.lower() or "combo" in line.lower():
         return None
 
@@ -103,8 +95,7 @@ def smart_parse_line(line, price_dict):
     quantity = 1
     item_clean = line
 
-    # 2. UNIVERSAL SEPARATOR LOGIC
-    # Now that "want to sell" is stripped by the caller, '^' will correctly hit the number
+    # 2. SEPARATOR LOGIC (Handles 5x, 5-, 5 )
     match_start = re.match(r'^(\d+)\s*[xX\-\.]?\s*(.*)', line)
     match_end = re.search(r'(.*)\s+[xX\-\.]?\s*(\d+)$', line)
 
@@ -127,7 +118,8 @@ def smart_parse_line(line, price_dict):
          return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
 
     # 5. EXACT MATCH
-    exact_map = {k.lower(): k for k in price_dict}
+    # SAFETY: Ensure we don't crash on empty keys
+    exact_map = {str(k).lower(): str(k) for k in price_dict if k}
     search_term = item_clean.lower()
     
     if search_term in exact_map:
@@ -139,24 +131,32 @@ def smart_parse_line(line, price_dict):
         return {"Item": f"❌ MISSING: {item_clean}", "Qty": quantity, "Unit Price": 0, "Total": 0}
 
     # 7. FUZZY MATCH
-    choices = list(price_dict.keys())
+    # SAFETY: Filter choices to ensure they are all Strings (Fixes TypeError)
+    choices = [str(k) for k in price_dict.keys() if k]
+    if not choices: return None
+    
     match, score = process.extractOne(item_clean, choices)
     
-    # Strict Guard for short words
+    # GUARD A: Strict Score (Bumped to 85 for better accuracy)
+    if score < 85:
+        return None
+
+    # GUARD B: Short Word Safety (Anti-Bear Pelt)
     if len(item_clean) <= 4:
         if item_clean.lower() not in match.lower():
             return None 
 
-    if score >= 80:
-        return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
-    
-    return None
+    # GUARD C: Length Deviation (Anti-Pack of Smokes)
+    # If the user input is significantly longer than the match, it's likely a wrong match.
+    # Ex: "Pack of cannabis seeds" (20 chars) vs "Pack of Smokes" (14 chars).
+    # If diff > 5 chars and score isn't perfect, reject.
+    if len(item_clean) > len(match) + 5 and score < 95:
+        return None
+
+    return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell):
-    """
-    Process a block of text and intelligently distribute items to Buy or Sell lists.
-    """
-    # 1. Normalize commas to newlines
+    # 1. Split Commas
     normalized_text = input_text.replace(',', '\n')
     lines = normalized_text.split('\n')
     
@@ -166,21 +166,15 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell):
     for line in lines:
         if not line.strip(): continue
         
-        # 2. Detect Intent & Clean Prefixes ("Want to sell 5x..." -> Intent: SELL, Text: "5x...")
+        # 2. Detect Intent & Clean
         intent, cleaned_line = detect_intent_and_clean(line)
         
-        # 3. Decide which DB to use based on Intent
-        # If Player Sells (Payout) -> Use WE_BUY prices
-        # If Player Buys (Cost)   -> Use WE_SELL prices
-        
-        # Default to Payout if Neutral (assuming user pasted in Payout tab)
+        # 3. Route to Correct DB
         target_list = "PAYOUT" 
-        
         if intent == "PLAYER_BUYS":
             target_list = "COST"
             parsed = smart_parse_line(cleaned_line, price_dict_sell)
         else:
-            # PLAYER_SELLS or NEUTRAL
             parsed = smart_parse_line(cleaned_line, price_dict_buy)
             
         if parsed:
@@ -192,7 +186,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell):
     return new_payout_items, new_cost_items
 
 def render_result_tables():
-    # Render PAYOUT Table
     st.subheader("💰 Payout (We Buy)")
     if 'buy_df' in st.session_state and not st.session_state.buy_df.empty:
         df = st.session_state.buy_df
@@ -203,11 +196,10 @@ def render_result_tables():
             st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
             st.success(f"### Total Payout: {df['Total'].sum():,}")
     else:
-        st.info("No Payout items yet.")
+        st.info("No Payout items.")
 
-    st.markdown("---") # Divider
+    st.markdown("---")
 
-    # Render COST Table
     st.subheader("🛒 Cost (We Sell)")
     if 'sell_df' in st.session_state and not st.session_state.sell_df.empty:
         df = st.session_state.sell_df
@@ -216,9 +208,9 @@ def render_result_tables():
             fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
             fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
             st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
-            st.error(f"### Total Due: {df['Total'].sum():,}") # Red box for cost
+            st.error(f"### Total Due: {df['Total'].sum():,}")
     else:
-        st.info("No Cost items yet.")
+        st.info("No Cost items.")
 
 def clear_state():
     st.session_state.buy_df = pd.DataFrame()
@@ -247,7 +239,6 @@ def main():
     if 'buy_df' not in st.session_state: st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state: st.session_state.sell_df = pd.DataFrame()
 
-    # --- MAIN INPUT AREA (The Brain) ---
     st.markdown("### 📜 Smart Trade Processor")
     st.markdown("Paste your **entire ticket** here. The AI will sort buys vs sells automatically.")
     
@@ -256,19 +247,10 @@ def main():
     if st.button("🚀 Process Ticket"):
         payouts, costs = process_text_block(input_text, WE_BUY, WE_SELL)
         
-        if payouts:
-            st.session_state.buy_df = pd.DataFrame(payouts)
-        else:
-            st.session_state.buy_df = pd.DataFrame() # Clear if empty
-            
-        if costs:
-            st.session_state.sell_df = pd.DataFrame(costs)
-        else:
-             st.session_state.sell_df = pd.DataFrame() # Clear if empty
+        st.session_state.buy_df = pd.DataFrame(payouts) if payouts else pd.DataFrame()
+        st.session_state.sell_df = pd.DataFrame(costs) if costs else pd.DataFrame()
 
-    # --- DISPLAY RESULTS ---
     render_result_tables()
-
     st.button("🗑️ Clear All", on_click=clear_state)
 
 if __name__ == "__main__":
