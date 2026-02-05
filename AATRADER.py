@@ -9,7 +9,6 @@ from thefuzz import process
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
 # --- ALIAS LIST ---
-# Force "lar" to become "LAR", etc.
 ALIASES = {
     "lar": "LAR",       
     "m16": "M16",       
@@ -55,11 +54,48 @@ def load_prices():
     except Exception:
         return {"WE_BUY": {}, "WE_SELL": {}}
 
+def detect_intent_and_clean(line):
+    """
+    Determines if the line is for PAYOUT (User sells) or COST (User buys).
+    Also strips the 'intent' keywords so we can find the quantity easier.
+    """
+    line_lower = line.lower()
+    
+    # default intent is whatever tab we are in, BUT:
+    # If explicitly "buying/ordering", it goes to SELL_DF (Cost to player)
+    # If explicitly "selling", it goes to BUY_DF (Payout to player)
+    
+    intent = "NEUTRAL" 
+    
+    # Keywords indicating Player wants to BUY (Cost)
+    buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need"]
+    for kw in buy_keywords:
+        if kw in line_lower:
+            intent = "PLAYER_BUYS" # Goes to WE_SELL tab
+            # Strip the keyword to help quantity detection
+            line = re.sub(kw, "", line, flags=re.IGNORECASE)
+            break
+            
+    # Keywords indicating Player wants to SELL (Payout)
+    sell_keywords = ["want to sell", "selling", "wts", "i have", "have"]
+    if intent == "NEUTRAL":
+        for kw in sell_keywords:
+            if kw in line_lower:
+                intent = "PLAYER_SELLS" # Goes to WE_BUY tab
+                line = re.sub(kw, "", line, flags=re.IGNORECASE)
+                break
+                
+    return intent, line
+
 def clean_text(text):
-    # Removes formatting but KEEPS 'x', '-', and '.' so we can detect them
+    # Removes formatting but KEEPS 'x', '-', and '.'
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
 
 def smart_parse_line(line, price_dict):
+    # 0. Pre-Clean: Remove "locker code" garbage to prevent false matches
+    if "locker code" in line.lower() or "combo" in line.lower():
+        return None
+
     # 1. Sanitize
     line = clean_text(line).lower().strip()
     if not line or len(line) < 2: return None
@@ -68,11 +104,8 @@ def smart_parse_line(line, price_dict):
     item_clean = line
 
     # 2. UNIVERSAL SEPARATOR LOGIC
-    # This Regex looks for: (Number) + (Optional x, -, or space) + (Item Name)
-    # It handles "5x Item", "5-Item", "5 Item", "5xItem" all the same way.
+    # Now that "want to sell" is stripped by the caller, '^' will correctly hit the number
     match_start = re.match(r'^(\d+)\s*[xX\-\.]?\s*(.*)', line)
-    
-    # Check end style: "Item 5x" or "Item 5"
     match_end = re.search(r'(.*)\s+[xX\-\.]?\s*(\d+)$', line)
 
     if match_start:
@@ -119,39 +152,78 @@ def smart_parse_line(line, price_dict):
     
     return None
 
-def render_tab(df_key, price_dict, type_label):
-    st.subheader(f"📊 {type_label} Calculation")
-    input_text = st.text_area(f"Paste {type_label} list here:", height=150, key=f"text_{df_key}")
+def process_text_block(input_text, price_dict_buy, price_dict_sell):
+    """
+    Process a block of text and intelligently distribute items to Buy or Sell lists.
+    """
+    # 1. Normalize commas to newlines
+    normalized_text = input_text.replace(',', '\n')
+    lines = normalized_text.split('\n')
     
-    if st.button(f"🚀 Process {type_label}", key=f"btn_{df_key}"):
-        # 1. SPLIT COMMAS: Transforms "5x Bear, 2x M4" into separate lines
-        normalized_text = input_text.replace(',', '\n')
+    new_payout_items = []
+    new_cost_items = []
+    
+    for line in lines:
+        if not line.strip(): continue
         
-        lines = normalized_text.split('\n')
-        results = []
-        for line in lines:
-            parsed = smart_parse_line(line, price_dict)
-            if parsed: results.append(parsed)
+        # 2. Detect Intent & Clean Prefixes ("Want to sell 5x..." -> Intent: SELL, Text: "5x...")
+        intent, cleaned_line = detect_intent_and_clean(line)
         
-        if results: st.session_state[df_key] = pd.DataFrame(results)
-        else: st.warning("No matches found.")
+        # 3. Decide which DB to use based on Intent
+        # If Player Sells (Payout) -> Use WE_BUY prices
+        # If Player Buys (Cost)   -> Use WE_SELL prices
+        
+        # Default to Payout if Neutral (assuming user pasted in Payout tab)
+        target_list = "PAYOUT" 
+        
+        if intent == "PLAYER_BUYS":
+            target_list = "COST"
+            parsed = smart_parse_line(cleaned_line, price_dict_sell)
+        else:
+            # PLAYER_SELLS or NEUTRAL
+            parsed = smart_parse_line(cleaned_line, price_dict_buy)
+            
+        if parsed:
+            if target_list == "COST":
+                new_cost_items.append(parsed)
+            else:
+                new_payout_items.append(parsed)
+                
+    return new_payout_items, new_cost_items
 
-    df = st.session_state[df_key]
-    if not df.empty and "Item" in df.columns:
-        formatted_df = df.copy()
-        formatted_df["Unit Price"] = formatted_df["Unit Price"].apply(lambda x: f"{x:,}")
-        formatted_df["Total"] = formatted_df["Total"].apply(lambda x: f"{x:,}")
-        
-        st.table(formatted_df[["Item", "Qty", "Unit Price", "Total"]])
-        
-        total_sum = df["Total"].sum()
-        st.success(f"### Total {type_label} Value: {total_sum:,}")
+def render_result_tables():
+    # Render PAYOUT Table
+    st.subheader("💰 Payout (We Buy)")
+    if 'buy_df' in st.session_state and not st.session_state.buy_df.empty:
+        df = st.session_state.buy_df
+        if "Item" in df.columns:
+            fmt_df = df.copy()
+            fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
+            fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
+            st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
+            st.success(f"### Total Payout: {df['Total'].sum():,}")
+    else:
+        st.info("No Payout items yet.")
+
+    st.markdown("---") # Divider
+
+    # Render COST Table
+    st.subheader("🛒 Cost (We Sell)")
+    if 'sell_df' in st.session_state and not st.session_state.sell_df.empty:
+        df = st.session_state.sell_df
+        if "Item" in df.columns:
+            fmt_df = df.copy()
+            fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
+            fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
+            st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
+            st.error(f"### Total Due: {df['Total'].sum():,}") # Red box for cost
+    else:
+        st.info("No Cost items yet.")
 
 def clear_state():
     st.session_state.buy_df = pd.DataFrame()
     st.session_state.sell_df = pd.DataFrame()
-    st.session_state["text_buy_df"] = ""
-    st.session_state["text_sell_df"] = ""
+    st.session_state["master_input"] = ""
 
 def main():
     set_theme()
@@ -175,9 +247,28 @@ def main():
     if 'buy_df' not in st.session_state: st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state: st.session_state.sell_df = pd.DataFrame()
 
-    tab1, tab2 = st.tabs(["💰 WE BUY (Payout)", "🛒 WE SELL (Cost)"])
-    with tab1: render_tab("buy_df", WE_BUY, "Payout")
-    with tab2: render_tab("sell_df", WE_SELL, "Cost")
+    # --- MAIN INPUT AREA (The Brain) ---
+    st.markdown("### 📜 Smart Trade Processor")
+    st.markdown("Paste your **entire ticket** here. The AI will sort buys vs sells automatically.")
+    
+    input_text = st.text_area("Paste Chat Log / Ticket:", height=200, key="master_input")
+    
+    if st.button("🚀 Process Ticket"):
+        payouts, costs = process_text_block(input_text, WE_BUY, WE_SELL)
+        
+        if payouts:
+            st.session_state.buy_df = pd.DataFrame(payouts)
+        else:
+            st.session_state.buy_df = pd.DataFrame() # Clear if empty
+            
+        if costs:
+            st.session_state.sell_df = pd.DataFrame(costs)
+        else:
+             st.session_state.sell_df = pd.DataFrame() # Clear if empty
+
+    # --- DISPLAY RESULTS ---
+    render_result_tables()
+
     st.button("🗑️ Clear All", on_click=clear_state)
 
 if __name__ == "__main__":
