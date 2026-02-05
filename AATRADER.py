@@ -1,133 +1,113 @@
 import streamlit as st
 import re
 import json
-from thefuzz import process, fuzz
-from PIL import Image
-import pytesseract
 import pandas as pd
-import os
+from thefuzz import process
 
-# --- OCR ENGINE PATH (LOCKED) ---
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
+# --- SMART LOGIC FUNCTIONS ---
 def load_prices():
-    if os.path.exists('prices.json'):
+    try:
         with open('prices.json', 'r') as f:
             return json.load(f)
-    return {"WE_BUY": {}, "TRADER_SELLS": {}}
+    except FileNotFoundError:
+        return {"WE_BUY": {}, "WE_SELL": {}}
 
-data = load_prices()
-WE_BUY = {"--- SELECT ITEM ---": 0.0, **data['WE_BUY']}
-TRADER_SELLS = {"--- SELECT ITEM ---": 0.0, **data['TRADER_SELLS']}
+def smart_parse_line(line, price_dict):
+    """
+    Strips numbers, dashes, and spaces to find the item and quantity.
+    Handles: '1-thermometer', 'thermometer 3', '2 - Santa hat', etc.
+    """
+    line = line.lower().strip()
+    if not line:
+        return None
 
-def run_smart_calc(input_text, price_dict):
-    breakdown = []
-    # Normalize text and split into words to find items hidden in sentences
-    words_in_text = re.findall(r'\w+', input_text.lower())
+    # 1. Extract quantity: Look for any digits (\d+)
+    nums = re.findall(r'\d+', line)
+    quantity = int(nums[0]) if nums else 1
     
-    # Expand "Slash Categories" into searchable individuals (e.g., Shovel/Pickaxe)
-    search_map = {}
-    for official_name, price in price_dict.items():
-        if "/" in official_name:
-            for part in official_name.split("/"):
-                search_map[part.strip().lower()] = (official_name, price)
+    # 2. Clean item name: Remove digits and common separators like dashes
+    item_clean = re.sub(r'\d+', '', line)
+    item_clean = item_clean.replace('-', ' ').strip()
+    
+    if not item_clean:
+        return None
+
+    # 3. Fuzzy Match against the database keys
+    choices = list(price_dict.keys())
+    if not choices:
+        return None
+        
+    match, score = process.extractOne(item_clean, choices)
+    
+    # 70 threshold to catch misspellings/partial names
+    if score >= 70:
+        price = price_dict[match]
+        return {
+            "Item": match, 
+            "Qty": quantity, 
+            "Unit Price": f"{price:,}", 
+            "Total": quantity * price,
+            "Raw_Total": quantity * price # Used for summing
+        }
+    return None
+
+def render_tab(df_key, price_dict, type_label):
+    st.subheader(f"📊 {type_label} Calculation")
+    
+    input_text = st.text_area(f"Paste {type_label} list here:", height=150, key=f"text_{df_key}")
+    
+    col1, col2 = st.columns([1, 4])
+    
+    if col1.button(f"🚀 Process {type_label}"):
+        lines = input_text.split('\n')
+        results = []
+        for line in lines:
+            parsed = smart_parse_line(line, price_dict)
+            if parsed:
+                results.append(parsed)
+        
+        if results:
+            st.session_state[df_key] = pd.DataFrame(results)
         else:
-            search_map[official_name.lower()] = (official_name, price)
+            st.warning("No matches found. Check your item names or price list.")
 
-    # Keyword Hunting Logic
-    found_items = []
-    for i, word in enumerate(words_in_text):
-        if len(word) < 3: continue
+    if not st.session_state[df_key].empty:
+        # Display the table
+        st.table(st.session_state[df_key][["Item", "Qty", "Unit Price", "Total"]])
         
-        # Match word against the expanded database
-        match, score = process.extractOne(word, search_map.keys(), scorer=fuzz.ratio)
-        
-        if score >= 85 and match != "--- select item ---":
-            official_name, price = search_map[match]
-            
-            # Smart Quantity Detection: Check the word immediately before the item
-            qty = 1
-            if i > 0 and words_in_text[i-1].isdigit():
-                qty = int(words_in_text[i-1])
-            
-            if official_name not in found_items:
-                breakdown.append({
-                    "Item Name": official_name, 
-                    "Quantity": qty, 
-                    "Price ($)": float(price)
-                })
-                found_items.append(official_name)
-                
-    return pd.DataFrame(breakdown)
+        # Calculate and show Total
+        total_sum = st.session_state[df_key]["Raw_Total"].sum()
+        st.metric(label=f"Total {type_label} Value", value=f"{total_sum:,}")
 
-# --- UI SETUP ---
-st.set_page_config(page_title="Cyber Trader Calc", page_icon="🏹", layout="wide")
-st.title("🏹 Cyber Trader Economy Suite")
-
-if "ocr_text" not in st.session_state: st.session_state.ocr_text = ""
-if "buy_df" not in st.session_state: st.session_state.buy_df = pd.DataFrame(columns=["Item Name", "Quantity", "Price ($)"])
-if "sell_df" not in st.session_state: st.session_state.sell_df = pd.DataFrame(columns=["Item Name", "Quantity", "Price ($)"])
-
-with st.sidebar:
-    st.header("📸 Ticket Scanner")
-    uploaded_file = st.file_uploader("Upload Ticket Screenshot", type=['png', 'jpg', 'jpeg'])
+# --- MAIN APP ---
+def main():
+    st.title("⚖️ Cyber Trader Economy Suite")
     
-    if uploaded_file:
-        img = Image.open(uploaded_file)
-        # PSM 6 is best for uniform blocks of text like chat messages
-        text = pytesseract.image_to_string(img, config='--psm 6')
-        
-        if text != st.session_state.ocr_text:
-            st.session_state.ocr_text = text
-            # Immediately push results into the tables
-            st.session_state.buy_df = run_smart_calc(text, WE_BUY)
-            st.session_state.sell_df = run_smart_calc(text, TRADER_SELLS)
-            st.success("✅ Scan & Chat Detection Complete!")
+    data = load_prices()
+    WE_BUY = data.get("WE_BUY", {})
+    WE_SELL = data.get("WE_SELL", {})
 
-tab1, tab2 = st.tabs(["💰 WE BUY (Payout)", "🛒 WE SELL (Cost)"])
+    # Initialize session states for dataframes
+    if 'buy_df' not in st.session_state:
+        st.session_state.buy_df = pd.DataFrame()
+    if 'sell_df' not in st.session_state:
+        st.session_state.sell_df = pd.DataFrame()
 
-def render_tab(df, price_dict, key_prefix, txt_val):
-    txt_input = st.text_area("Scanned Text / Manual Input", value=txt_val, height=150, key=f"txt_{key_prefix}")
-    
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("🚀 Process Text", key=f"run_{key_prefix}"):
-            df = run_smart_calc(txt_input, price_dict)
-    with c2:
-        if st.button("➕ Add Item", key=f"add_{key_prefix}"):
-            new_row = pd.DataFrame([{"Item Name": "--- SELECT ITEM ---", "Quantity": 1, "Price ($)": 0.0}])
-            df = pd.concat([df, new_row], ignore_index=True)
-    with c3:
-        if st.button("🔄 Update Totals", key=f"upd_{key_prefix}"):
-            st.rerun()
+    tab1, tab2 = st.tabs(["💰 WE BUY (Payout)", "🛒 WE SELL (Cost)"])
 
-    # Automatic Price Sync for manual edits
-    if not df.empty and "Item Name" in df.columns:
-        df["Price ($)"] = df["Item Name"].map(price_dict).fillna(0).astype(float)
-        
-    edited_df = st.data_editor(
-        df, use_container_width=True, num_rows="dynamic",
-        column_config={
-            "Item Name": st.column_config.SelectboxColumn("Item Name", options=list(price_dict.keys()), required=True),
-            "Price ($)": st.column_config.NumberColumn(disabled=True)
-        },
-        key=f"edit_{key_prefix}"
-    )
-    
-    if not edited_df.empty:
-        total = (edited_df["Quantity"] * edited_df["Price ($)"]).sum()
-        st.success(f"### Total: ${total:,.0f}")
-        return edited_df
-    return df
+    with tab1:
+        render_tab("buy_df", WE_BUY, "Payout")
 
-with tab1:
-    st.session_state.buy_df = render_tab(st.session_state.buy_df, WE_BUY, "buy", st.session_state.ocr_text)
+    with tab2:
+        render_tab("sell_df", WE_SELL, "Cost")
 
-with tab2:
-    st.session_state.sell_df = render_tab(st.session_state.sell_df, TRADER_SELLS, "sell", st.session_state.ocr_text)
+    if st.button("🗑️ Clear All"):
+        st.session_state.buy_df = pd.DataFrame()
+        st.session_state.sell_df = pd.DataFrame()
+        st.rerun()
 
-if st.button("🗑️ Clear All"):
-    st.session_state.ocr_text = ""
-    st.session_state.buy_df = pd.DataFrame(columns=["Item Name", "Quantity", "Price ($)"])
-    st.session_state.sell_df = pd.DataFrame(columns=["Item Name", "Quantity", "Price ($)"])
-    st.rerun()
+if __name__ == "__main__":
+    main()
