@@ -12,53 +12,59 @@ st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="
 def set_theme():
     st.markdown("""
     <style>
-        /* Force Dark Background */
+        /* 1. Main Background & Text */
         .stApp {
             background-color: #0E1117;
             color: #FAFAFA;
         }
         
-        /* Customize Sidebar */
+        /* 2. Sidebar Background & Text */
         section[data-testid="stSidebar"] {
             background-color: #262730;
         }
-        
-        /* Cyber Text Areas */
-        .stTextArea textarea {
-            background-color: #1E1E1E !important;
-            color: #00FF00 !important; /* Green Text */
-            border: 1px solid #4CAF50;
-            font-family: 'Courier New', monospace; /* Terminal look */
+        section[data-testid="stSidebar"] * {
+            color: #FAFAFA !important; /* Force sidebar text white */
         }
         
-        /* Cyber Buttons */
+        /* 3. Input Labels (The text above boxes) */
+        .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label {
+            color: #E0E0E0 !important;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+        
+        /* 4. Input Boxes (The inside part) */
+        .stTextArea textarea, .stTextInput input, .stNumberInput input {
+            background-color: #1E1E1E !important;
+            color: #00FF00 !important; /* Cyber Green Text */
+            border: 1px solid #4CAF50;
+        }
+        
+        /* 5. Buttons */
         .stButton>button {
             color: #FAFAFA;
             background-color: #262730;
             border: 1px solid #4CAF50;
             transition: all 0.3s ease;
         }
-        
-        /* Button Hover Effect */
         .stButton>button:hover {
             background-color: #4CAF50;
             color: #000000;
-            border-color: #00FF00;
-            box-shadow: 0 0 10px #4CAF50; /* Neon Glow */
+            box-shadow: 0 0 10px #4CAF50;
         }
         
-        /* Tables */
-        thead tr th:first-child {display:none}
-        tbody th {display:none}
-        
-        /* Headers */
-        h1, h2, h3 {
-            color: #FAFAFA !important;
-        }
-        
-        /* Success/Metric Text */
-        [data-testid="stMetricValue"] {
+        /* 6. Metrics & Success Messages */
+        [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
             color: #4CAF50 !important;
+        }
+        
+        /* 7. Tables */
+        thead tr th {
+            color: #FAFAFA !important;
+            background-color: #262730 !important;
+        }
+        tbody tr td {
+            color: #E0E0E0 !important; /* Table content light gray */
         }
     </style>
     """, unsafe_allow_html=True)
@@ -83,7 +89,6 @@ def load_prices():
         with open('prices.json', 'r') as f:
             return json.load(f)
     except Exception:
-        # Returns empty structure if file is missing or broken
         return {"WE_BUY": {}, "WE_SELL": {}}
 
 def smart_parse_line(line, price_dict):
@@ -93,20 +98,16 @@ def smart_parse_line(line, price_dict):
     """
     line = line.lower().strip()
     
-    # 1. Basic garbage check
     if not line or len(line) < 2:
         return None
 
-    # 2. EXTRACT QUANTITY (Find digits anywhere in the line)
     nums = re.findall(r'\d+', line)
     quantity = int(nums[0]) if nums else 1
     
-    # 3. CLEAN ITEM NAME (Remove digits and dashes)
     item_clean = re.sub(r'\d+', '', line)
     item_clean = item_clean.replace('-', ' ').strip()
     
-    # 4. PRIORITY CHECK: SPECIAL ITEM
-    # Checks this FIRST so it registers even if inside an "Item of the week" line
+    # Priority Check: Special Item
     if special_item_active and not is_expired and special_name:
         if special_name.lower() in item_clean:
              return {
@@ -116,12 +117,11 @@ def smart_parse_line(line, price_dict):
                 "Total": quantity * special_price
             }
 
-    # 5. IGNORE RULE
-    # If it wasn't the special item, AND it says "item of the week", ignore it.
+    # Ignore Rule
     if "item of the week" in line:
         return None
 
-    # 6. FUZZY MATCH (Standard Items)
+    # Fuzzy Match
     if not item_clean:
         return None
 
@@ -131,7 +131,6 @@ def smart_parse_line(line, price_dict):
         
     match, score = process.extractOne(item_clean, choices)
     
-    # Threshold set to 80 to avoid false positives
     if score >= 80:
         price = price_dict[match]
         return {
@@ -160,7 +159,6 @@ def render_tab(df_key, price_dict, type_label):
         else:
             st.warning("No matches found.")
 
-    # Display Table Logic
     df = st.session_state[df_key]
     if not df.empty and "Item" in df.columns:
         formatted_df = df.copy()
@@ -169,16 +167,14 @@ def render_tab(df_key, price_dict, type_label):
         
         st.table(formatted_df[["Item", "Qty", "Unit Price", "Total"]])
         
-        # Calculate Sum from original numeric data
         total_sum = df["Total"].sum()
         st.success(f"### Total {type_label} Value: {total_sum:,}")
 
 # --- MAIN APP ---
 def main():
-    set_theme() # <--- INJECT CUSTOM THEME
+    set_theme() # Apply the new High-Contrast Theme
     st.title("⚖️ Cyber Trader Economy Suite")
     
-    # Show active promo banner
     if special_item_active and not is_expired and special_name:
         st.info(f"🔥 **ACTIVE PROMO:** {special_name} @ {special_price:,} until {expiry_date}")
 
@@ -186,7 +182,6 @@ def main():
     WE_BUY = data.get("WE_BUY", {})
     WE_SELL = data.get("WE_SELL", {})
 
-    # Initialize session states
     if 'buy_df' not in st.session_state:
         st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state:
