@@ -8,8 +8,8 @@ from thefuzz import process
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
-# --- ALIAS LIST (The "Translator") ---
-# Maps user inputs (lowercase) to the "Search Term" you want to find.
+# --- ALIAS LIST ---
+# Force "lar" to become "LAR"
 ALIASES = {
     "lar": "LAR",       
     "m16": "M16",       
@@ -18,52 +18,24 @@ ALIASES = {
     "vs": "VSS"
 }
 
-# --- CUSTOM CSS FOR CYBER/NIGHT MODE ---
+# --- CUSTOM CSS ---
 def set_theme():
     st.markdown("""
     <style>
         .stApp { background-color: #0E1117; color: #FAFAFA; }
         section[data-testid="stSidebar"] { background-color: #262730; }
         section[data-testid="stSidebar"] * { color: #FAFAFA !important; }
-        .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label {
-            color: #E0E0E0 !important; font-size: 1rem; font-weight: bold;
-        }
-        .stTextArea textarea, .stTextInput input, .stNumberInput input, .stDateInput input {
+        .stTextArea textarea, .stTextInput input {
             background-color: #1E1E1E !important; color: #00FF00 !important;
             border: 1px solid #4CAF50; caret-color: #00FF00;
         }
         .stButton>button {
-            color: #FAFAFA; background-color: #262730; border: 1px solid #4CAF50; transition: all 0.3s ease;
+            color: #FAFAFA; background-color: #262730; border: 1px solid #4CAF50;
         }
-        .stButton>button:hover {
-            background-color: #4CAF50; color: #000000; box-shadow: 0 0 10px #4CAF50;
-        }
-        [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #4CAF50 !important; }
         thead tr th { color: #FAFAFA !important; background-color: #262730 !important; }
         tbody tr td { color: #E0E0E0 !important; }
-        div[data-baseweb="calendar"] { background-color: #262730 !important; }
-        div[data-baseweb="calendar"] div { color: #FAFAFA !important; }
-        div[data-baseweb="calendar"] button:hover { background-color: #4CAF50 !important; color: #000000 !important; }
-        div[aria-selected="true"] { background-color: #4CAF50 !important; color: #000000 !important; }
     </style>
     """, unsafe_allow_html=True)
-
-# --- SIDEBAR ---
-st.sidebar.header("🔥 Item of the Week")
-special_item_active = st.sidebar.checkbox("Enable Special Price")
-special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
-special_price_input = st.sidebar.text_input("Special Price", value="0")
-try:
-    special_price = int(special_price_input)
-except ValueError:
-    special_price = 0
-expiry_date = st.sidebar.date_input("Offer Ends On", min_value=date.today())
-if st.sidebar.button("🔄 Update Promo"):
-    st.rerun()
-
-is_expired = date.today() > expiry_date
-if special_item_active and is_expired:
-    st.sidebar.error(f"⚠️ Offer expired on {expiry_date}")
 
 # --- LOGIC ---
 def load_prices():
@@ -73,60 +45,70 @@ def load_prices():
     except Exception:
         return {"WE_BUY": {}, "WE_SELL": {}}
 
+def clean_text(text):
+    # NUCLEAR CLEANER: Removes everything except letters, numbers, and hyphens.
+    # This strips hidden Discord formatting that breaks the logic.
+    return re.sub(r'[^a-zA-Z0-9\- ]', '', text)
+
 def smart_parse_line(line, price_dict):
-    line = line.lower().strip()
+    # 1. Sanitize (Remove hidden garbage)
+    line = clean_text(line).lower().strip()
     if not line or len(line) < 2: return None
 
-    # 1. QUANTITY
+    # 2. Extract Quantity
     quantity = 1
-    item_clean = line
-    match_start = re.match(r'^(\d+)\s*[:-x\s]?\s*', line)
-    match_end = re.search(r'\s*[:-x\s]?\s*(\d+)$', line)
+    # Check start (e.g. "2 lar")
+    match_start = re.match(r'^(\d+)\s+', line)
+    # Check end (e.g. "lar 2")
+    match_end = re.search(r'\s+(\d+)$', line)
 
+    item_clean = line
     if match_start:
         quantity = int(match_start.group(1))
-        item_clean = line[match_start.end():] 
+        item_clean = line[match_start.end():].strip()
     elif match_end:
         quantity = int(match_end.group(1))
-        item_clean = line[:match_end.start()]
-
-    item_clean = item_clean.replace('-', ' ').strip()
+        item_clean = line[:match_end.start()].strip()
     
-    # 2. CHECK ALIASES (The Translator)
+    # 3. Apply Alias
     if item_clean in ALIASES:
-        item_clean = ALIASES[item_clean] # Swap "lar" -> "LAR"
+        item_clean = ALIASES[item_clean] # Swaps "lar" to "LAR"
+        is_aliased = True
+    else:
+        is_aliased = False
 
-    # 3. SPECIAL ITEM
-    if special_item_active and not is_expired and special_name:
-        if special_name.lower() in item_clean.lower():
-             return {"Item": f"🔥 {special_name} (SPECIAL)", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
+    # 4. Special Item Check
+    # (Checking global variables from sidebar)
+    if 'special_name' in globals() and special_name and special_name.lower() in item_clean.lower():
+         return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
 
-    # 4. IGNORE RULE
-    if "item of the week" in line: return None
-    if not item_clean: return None
-
-    # 5. EXACT MATCH (Case-Insensitive Fix Applied Here)
-    # We look for the 'search_term' inside our lowercase map
-    search_term = item_clean.lower()
+    # 5. EXACT MATCH (The moment of truth)
+    # We look for the item in the price list.
     exact_map = {k.lower(): k for k in price_dict}
+    search_term = item_clean.lower()
     
     if search_term in exact_map:
         real_key = exact_map[search_term]
         return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key]}
 
-    # 6. FUZZY MATCH (With Guard)
+    # 6. STOP IF ALIASED
+    # If we manually set "LAR" via Alias, and it wasn't found above, 
+    # DO NOT GUESS "Bear Pelt". Just fail.
+    if is_aliased:
+        return {"Item": f"❌ MISSING: {item_clean}", "Qty": quantity, "Unit Price": 0, "Total": 0}
+
+    # 7. FUZZY MATCH (Only for non-aliased items)
     choices = list(price_dict.keys())
-    if not choices: return None
     match, score = process.extractOne(item_clean, choices)
     
-    # GUARD: Strict Check for Short Words
+    # Strict Guard: Input must be inside match for short words
     if len(item_clean) <= 4:
-        # If strict substring check fails, abort. DO NOT GUESS "Bear Pelt".
         if item_clean.lower() not in match.lower():
             return None 
 
     if score >= 80:
         return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
+    
     return None
 
 def render_tab(df_key, price_dict, type_label):
@@ -145,17 +127,18 @@ def render_tab(df_key, price_dict, type_label):
 
     df = st.session_state[df_key]
     if not df.empty and "Item" in df.columns:
-        formatted_df = df.copy()
-        formatted_df["Unit Price"] = formatted_df["Unit Price"].apply(lambda x: f"{x:,}")
-        formatted_df["Total"] = formatted_df["Total"].apply(lambda x: f"{x:,}")
-        st.table(formatted_df[["Item", "Qty", "Unit Price", "Total"]])
+        # Style the dataframe
+        st.dataframe(df, use_container_width=True, hide_index=True)
         total_sum = df["Total"].sum()
         st.success(f"### Total {type_label} Value: {total_sum:,}")
         
-        # DEBUG: Show what keys are actually loaded (Hidden inside an expander)
-        # Use this if "LAR" still fails to verify it's really in the file
-        with st.expander("🔍 Debug: Check Loaded Price Keys"):
-            st.write(list(price_dict.keys()))
+        # DEBUGGER: Show user what keys we actually have
+        with st.expander("🕵️ Debug: Check Database"):
+            st.write("If you see 'MISSING' above, search below to see how it's spelled in your file:")
+            search_q = st.text_input("Search Keys", key=f"s_{df_key}")
+            if search_q:
+                hits = [k for k in price_dict.keys() if search_q.lower() in k.lower()]
+                st.write(hits)
 
 def clear_state():
     st.session_state.buy_df = pd.DataFrame()
@@ -166,8 +149,17 @@ def clear_state():
 def main():
     set_theme()
     st.title("⚖️ Cyber Trader Economy Suite")
-    if special_item_active and not is_expired and special_name:
-        st.info(f"🔥 **ACTIVE PROMO:** {special_name} @ {special_price:,} until {expiry_date}")
+    
+    # Sidebar
+    st.sidebar.header("🔥 Item of the Week")
+    global special_name, special_price
+    special_item_active = st.sidebar.checkbox("Enable Special Price")
+    special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
+    special_price_val = st.sidebar.text_input("Special Price", value="0")
+    try: special_price = int(special_price_val)
+    except: special_price = 0
+    expiry_date = st.sidebar.date_input("Offer Ends On", min_value=date.today())
+    if st.sidebar.button("🔄 Update Promo"): st.rerun()
 
     data = load_prices()
     WE_BUY = data.get("WE_BUY", {})
