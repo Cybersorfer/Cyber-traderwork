@@ -119,38 +119,30 @@ def load_prices():
 
 def smart_parse_line(line, price_dict):
     """
-    Parses a single line of text to extract quantity and item name.
-    Preserves numbers inside item names (e.g., 'M16', 'M4A1').
+    Parses a single line. Uses EXACT MATCH first to solve the LAR/Bear Pelt bug.
     """
     line = line.lower().strip()
     
-    # 1. Basic garbage check
     if not line or len(line) < 2:
         return None
 
-    # 2. SMART QUANTITY DETECTION
+    # 1. SMART QUANTITY DETECTION (Start/End only)
     quantity = 1
     item_clean = line
 
-    # Check A: Number at the START (e.g., "5 m16" or "1 - m4a1")
     match_start = re.match(r'^(\d+)\s*[:-x\s]?\s*', line)
-    
-    # Check B: Number at the END (e.g., "m16 5" or "m4a1 - 1")
     match_end = re.search(r'\s*[:-x\s]?\s*(\d+)$', line)
 
     if match_start:
         quantity = int(match_start.group(1))
-        # Remove only the found quantity from the start
         item_clean = line[match_start.end():] 
     elif match_end:
         quantity = int(match_end.group(1))
-        # Remove only the found quantity from the end
         item_clean = line[:match_end.start()]
 
-    # 3. Final cleanup (remove leftover dashes/spaces)
     item_clean = item_clean.replace('-', ' ').strip()
     
-    # 4. PRIORITY CHECK: SPECIAL ITEM
+    # 2. PRIORITY CHECK: SPECIAL ITEM
     if special_item_active and not is_expired and special_name:
         if special_name.lower() in item_clean:
              return {
@@ -160,14 +152,30 @@ def smart_parse_line(line, price_dict):
                 "Total": quantity * special_price
             }
 
-    # 5. IGNORE RULE
+    # 3. IGNORE RULE
     if "item of the week" in line:
         return None
 
-    # 6. FUZZY MATCH (Standard Items)
     if not item_clean:
         return None
 
+    # --- NEW FEATURE: EXACT MATCH PRIORITY ---
+    # Creates a lowercase map of your JSON keys: {'lar': 'LAR', 'm4': 'M4'}
+    # This solves the short-word guessing bug.
+    exact_map = {k.lower(): k for k in price_dict}
+    
+    if item_clean in exact_map:
+        real_key = exact_map[item_clean]
+        price = price_dict[real_key]
+        return {
+            "Item": real_key,
+            "Qty": quantity,
+            "Unit Price": price,
+            "Total": quantity * price
+        }
+    # ----------------------------------------
+
+    # 4. FUZZY MATCH (Only runs if Exact Match failed)
     choices = list(price_dict.keys())
     if not choices:
         return None
@@ -213,13 +221,9 @@ def render_tab(df_key, price_dict, type_label):
         total_sum = df["Total"].sum()
         st.success(f"### Total {type_label} Value: {total_sum:,}")
 
-# --- CALLBACK FUNCTION TO CLEAR DATA SAFELY ---
 def clear_state():
-    # Clear the dataframes
     st.session_state.buy_df = pd.DataFrame()
     st.session_state.sell_df = pd.DataFrame()
-    
-    # Clear the text input widgets
     st.session_state["text_buy_df"] = ""
     st.session_state["text_sell_df"] = ""
 
