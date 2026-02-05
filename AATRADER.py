@@ -182,7 +182,7 @@ def smart_parse_line(line, price_dict):
     # --- SHORT WORD SAFETY ---
     # If the word is 3 chars or less (e.g. "LAR"), require 90% match.
     # Longer words (e.g. "Thermometer") allow 80% for typos.
-    threshold = 95 if len(item_clean) < 4 else 80
+    threshold = 100 if len(item_clean) < 4 else 80
     
     if score >= threshold:
         price = price_dict[match]
@@ -258,4 +258,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
