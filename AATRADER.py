@@ -119,14 +119,15 @@ def load_prices():
 
 def smart_parse_line(line, price_dict):
     """
-    Parses a single line. Uses EXACT MATCH first to solve the LAR/Bear Pelt bug.
+    Parses a single line. 
+    INCLUDES: Smart Quantity, Exact Match, and Short-Word Safety (Dynamic Threshold).
     """
     line = line.lower().strip()
     
     if not line or len(line) < 2:
         return None
 
-    # 1. SMART QUANTITY DETECTION (Start/End only)
+    # 1. SMART QUANTITY DETECTION
     quantity = 1
     item_clean = line
 
@@ -159,11 +160,8 @@ def smart_parse_line(line, price_dict):
     if not item_clean:
         return None
 
-    # --- NEW FEATURE: EXACT MATCH PRIORITY ---
-    # Creates a lowercase map of your JSON keys: {'lar': 'LAR', 'm4': 'M4'}
-    # This solves the short-word guessing bug.
+    # 4. EXACT MATCH (Best case)
     exact_map = {k.lower(): k for k in price_dict}
-    
     if item_clean in exact_map:
         real_key = exact_map[item_clean]
         price = price_dict[real_key]
@@ -173,16 +171,20 @@ def smart_parse_line(line, price_dict):
             "Unit Price": price,
             "Total": quantity * price
         }
-    # ----------------------------------------
 
-    # 4. FUZZY MATCH (Only runs if Exact Match failed)
+    # 5. FUZZY MATCH (With Safety Net)
     choices = list(price_dict.keys())
     if not choices:
         return None
         
     match, score = process.extractOne(item_clean, choices)
     
-    if score >= 80:
+    # --- SHORT WORD SAFETY ---
+    # If the word is 3 chars or less (e.g. "LAR"), require 90% match.
+    # Longer words (e.g. "Thermometer") allow 80% for typos.
+    threshold = 90 if len(item_clean) < 4 else 80
+    
+    if score >= threshold:
         price = price_dict[match]
         return {
             "Item": match, 
