@@ -33,11 +33,12 @@ def set_theme():
             font-weight: bold;
         }
         
-        /* 4. Input Boxes */
-        .stTextArea textarea, .stTextInput input, .stNumberInput input {
+        /* 4. Input Boxes (Added .stDateInput input to fix the invisible date) */
+        .stTextArea textarea, .stTextInput input, .stNumberInput input, .stDateInput input {
             background-color: #1E1E1E !important;
             color: #00FF00 !important; /* Cyber Green Text */
             border: 1px solid #4CAF50;
+            caret-color: #00FF00; /* Green blinking cursor */
         }
         
         /* 5. Buttons */
@@ -69,16 +70,15 @@ def set_theme():
 
         /* 8. CALENDAR FIX (Date Input Popup) */
         div[data-baseweb="calendar"] {
-            background-color: #262730 !important; /* Dark background for popup */
+            background-color: #262730 !important;
         }
         div[data-baseweb="calendar"] div {
-            color: #FAFAFA !important; /* White text for days */
+            color: #FAFAFA !important;
         }
         div[data-baseweb="calendar"] button:hover {
-            background-color: #4CAF50 !important; /* Green hover */
+            background-color: #4CAF50 !important;
             color: #000000 !important;
         }
-        /* The selected date circle */
         div[aria-selected="true"] {
             background-color: #4CAF50 !important;
             color: #000000 !important;
@@ -93,18 +93,16 @@ st.sidebar.markdown("Set a temporary special price for a specific item.")
 special_item_active = st.sidebar.checkbox("Enable Special Price")
 special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
 
-# CHANGED: Replaced Number Input with Text Input to remove +/- buttons
+# Price Input (Text based to remove +/- buttons)
 special_price_input = st.sidebar.text_input("Special Price", value="0")
 
-# Convert text input to integer safely
 try:
     special_price = int(special_price_input)
 except ValueError:
-    special_price = 0 # Default to 0 if they type letters
+    special_price = 0
 
 expiry_date = st.sidebar.date_input("Offer Ends On", min_value=date.today())
 
-# ADDED: Update Button (Visual confirmation)
 if st.sidebar.button("🔄 Update Promo"):
     st.rerun()
 
