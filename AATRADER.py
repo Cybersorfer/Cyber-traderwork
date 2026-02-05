@@ -28,30 +28,31 @@ def load_prices():
         with open('prices.json', 'r') as f:
             return json.load(f)
     except Exception:
+        # Returns empty structure if file is missing or broken
         return {"WE_BUY": {}, "WE_SELL": {}}
 
 def smart_parse_line(line, price_dict):
+    """
+    Parses a single line of text to extract quantity and item name.
+    Prioritizes the 'Special Item' over fuzzy matching.
+    """
     line = line.lower().strip()
     
-    # 1. IGNORING RULE: Explicitly ignore the announcement line to prevent bugs
-    if not line or len(line) < 2 or "item of the week" in line:
+    # 1. Basic garbage check
+    if not line or len(line) < 2:
         return None
 
-    # 2. Extract quantity
+    # 2. EXTRACT QUANTITY (Find digits anywhere in the line)
     nums = re.findall(r'\d+', line)
     quantity = int(nums[0]) if nums else 1
     
-    # 3. Clean item name
+    # 3. CLEAN ITEM NAME (Remove digits and dashes)
     item_clean = re.sub(r'\d+', '', line)
     item_clean = item_clean.replace('-', ' ').strip()
     
-    if not item_clean:
-        return None
-
-    # 4. CHECK SPECIAL ITEM OVERRIDE
-    # If the user manually set a special item, check that first
+    # 4. PRIORITY CHECK: SPECIAL ITEM
+    # Checks this FIRST so it registers even if inside an "Item of the week" line
     if special_item_active and not is_expired and special_name:
-        # Simple text match for the special item
         if special_name.lower() in item_clean:
              return {
                 "Item": f"🔥 {special_name} (SPECIAL)", 
@@ -60,14 +61,22 @@ def smart_parse_line(line, price_dict):
                 "Total": quantity * special_price
             }
 
-    # 5. Fuzzy Match against database
+    # 5. IGNORE RULE
+    # If it wasn't the special item, AND it says "item of the week", ignore it.
+    if "item of the week" in line:
+        return None
+
+    # 6. FUZZY MATCH (Standard Items)
+    if not item_clean:
+        return None
+
     choices = list(price_dict.keys())
     if not choices:
         return None
         
     match, score = process.extractOne(item_clean, choices)
     
-    # Threshold at 80 to be safe
+    # Threshold set to 80 to avoid false positives (e.g. "Stove" matching "Smokes")
     if score >= 80:
         price = price_dict[match]
         return {
@@ -96,15 +105,17 @@ def render_tab(df_key, price_dict, type_label):
         else:
             st.warning("No matches found.")
 
-    # Display Table Logic
+    # Display Table Logic (Safety Check included)
     df = st.session_state[df_key]
     if not df.empty and "Item" in df.columns:
+        # Create a copy for formatting to avoid modifying the math data
         formatted_df = df.copy()
         formatted_df["Unit Price"] = formatted_df["Unit Price"].apply(lambda x: f"{x:,}")
         formatted_df["Total"] = formatted_df["Total"].apply(lambda x: f"{x:,}")
         
         st.table(formatted_df[["Item", "Qty", "Unit Price", "Total"]])
         
+        # Calculate Sum from original numeric data
         total_sum = df["Total"].sum()
         st.success(f"### Total {type_label} Value: {total_sum:,}")
 
@@ -112,6 +123,7 @@ def render_tab(df_key, price_dict, type_label):
 def main():
     st.title("⚖️ Cyber Trader Economy Suite")
     
+    # Show active promo banner
     if special_item_active and not is_expired and special_name:
         st.info(f"🔥 **ACTIVE PROMO:** {special_name} @ {special_price:,} until {expiry_date}")
 
@@ -119,6 +131,7 @@ def main():
     WE_BUY = data.get("WE_BUY", {})
     WE_SELL = data.get("WE_SELL", {})
 
+    # Initialize session states
     if 'buy_df' not in st.session_state:
         st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state:
