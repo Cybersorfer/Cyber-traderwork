@@ -43,7 +43,7 @@ def smart_parse_line(line, price_dict):
     match, score = process.extractOne(item_clean, choices)
     
     # Threshold set to 70 to catch typos while staying accurate
-    if score >= 70:
+    if score >= 80:
         price = price_dict[match]
         return {
             "Item": match, 
@@ -115,3 +115,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
