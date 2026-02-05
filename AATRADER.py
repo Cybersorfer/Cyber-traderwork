@@ -9,13 +9,12 @@ from thefuzz import process
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
 
 # --- ALIAS LIST (The "Translator") ---
-# This forces the app to recognize specific short names.
-# "user typed": "EXACT KEY IN PRICES.JSON"
+# Maps user inputs (lowercase) to the "Search Term" you want to find.
 ALIASES = {
-    "lar": "LAR",        # <--- THIS LINE FIXES YOUR BUG. It forces "lar" to look for "LAR".
-    "m16": "M16",        # Forces "m16" to look for "M16"
-    "m4": "M4",
-    "ak": "KA-74",       # Example: maps "ak" to "KA-74"
+    "lar": "LAR",       
+    "m16": "M16",       
+    "m4": "M4-A1",      
+    "ak": "KA-74",      
     "vs": "VSS"
 }
 
@@ -94,35 +93,36 @@ def smart_parse_line(line, price_dict):
     item_clean = item_clean.replace('-', ' ').strip()
     
     # 2. CHECK ALIASES (The Translator)
-    # This translates "lar" to "LAR" before we even look at the database.
     if item_clean in ALIASES:
-        item_clean = ALIASES[item_clean].lower()
+        item_clean = ALIASES[item_clean] # Swap "lar" -> "LAR"
 
     # 3. SPECIAL ITEM
     if special_item_active and not is_expired and special_name:
-        if special_name.lower() in item_clean:
+        if special_name.lower() in item_clean.lower():
              return {"Item": f"🔥 {special_name} (SPECIAL)", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
 
     # 4. IGNORE RULE
     if "item of the week" in line: return None
     if not item_clean: return None
 
-    # 5. EXACT MATCH
-    # Since Alias converted it to "lar", and "LAR" is in your JSON, this will match.
+    # 5. EXACT MATCH (Case-Insensitive Fix Applied Here)
+    # We look for the 'search_term' inside our lowercase map
+    search_term = item_clean.lower()
     exact_map = {k.lower(): k for k in price_dict}
-    if item_clean in exact_map:
-        real_key = exact_map[item_clean]
+    
+    if search_term in exact_map:
+        real_key = exact_map[search_term]
         return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key]}
 
-    # 6. FUZZY MATCH (With Safety Guard)
+    # 6. FUZZY MATCH (With Guard)
     choices = list(price_dict.keys())
     if not choices: return None
     match, score = process.extractOne(item_clean, choices)
     
-    # GUARD: If input is short (<=4 chars), it MUST be inside the match name.
-    # "LAR" is not inside "Bear Pelt", so it gets rejected here if the alias/exact match failed.
+    # GUARD: Strict Check for Short Words
     if len(item_clean) <= 4:
-        if item_clean not in match.lower():
+        # If strict substring check fails, abort. DO NOT GUESS "Bear Pelt".
+        if item_clean.lower() not in match.lower():
             return None 
 
     if score >= 80:
@@ -151,6 +151,11 @@ def render_tab(df_key, price_dict, type_label):
         st.table(formatted_df[["Item", "Qty", "Unit Price", "Total"]])
         total_sum = df["Total"].sum()
         st.success(f"### Total {type_label} Value: {total_sum:,}")
+        
+        # DEBUG: Show what keys are actually loaded (Hidden inside an expander)
+        # Use this if "LAR" still fails to verify it's really in the file
+        with st.expander("🔍 Debug: Check Loaded Price Keys"):
+            st.write(list(price_dict.keys()))
 
 def clear_state():
     st.session_state.buy_df = pd.DataFrame()
