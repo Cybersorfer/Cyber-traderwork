@@ -1,7 +1,7 @@
 {
   "WE_BUY": {
     "wooden crate full of   weed": 5000, "Weed (per bud)": 100, "Bear Pelt": 2000, "Elk Pelt": 1000, "Deer Pelt": 1000, "Wolf Pelt": 500,
-    "AUG-AX": 4000, "DMR": 6000, "KA-101": 4000, "KA-M": 3000, "LAR": 6000, "M16-A2": 3000, "M16": 3000,
+    "AUG-AX": 4000, "DMR": 6000, "KA-101": 4000, "KA-M": 3000, "KAM": 3000, "LAR": 6000, "M16-A2": 3000, "M16": 3000,
     "M4-A1": 3000, "M4": 3000, "Savannah": 3000, "SVAL": 4000, "Vaiga": 4000, "Vikhr": 4000, "VS-89": 4000,
     "VSD": 6000, "VSS": 3000, "Bibles": 4000, "Egg": 2000, "Yellow Scarred Moto Helmet": 10000,
     "Alarm Clock": 1000, "Kitchen Timer": 1000, "Pen": 2000, "Santa Beard": 1000, "Santa Hat": 1000,
@@ -123,3 +123,4 @@
     "Jerry Can, Full": 2000
   }
 }
+
