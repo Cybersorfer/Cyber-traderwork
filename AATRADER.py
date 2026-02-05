@@ -12,45 +12,44 @@ def load_prices():
     try:
         with open('prices.json', 'r') as f:
             return json.load(f)
-    except FileNotFoundError:
+    except Exception:
+        # Returns empty structure if file is missing or broken
         return {"WE_BUY": {}, "WE_SELL": {}}
 
 def smart_parse_line(line, price_dict):
     """
-    Strips numbers, dashes, and spaces to find the item and quantity.
-    Handles: '1-thermometer', 'thermometer 3', '2 - Santa hat', etc.
+    Handles messy inputs like '1-thermometer', 'thermometer 3', '2 - Santa hat'.
     """
     line = line.lower().strip()
-    if not line:
+    if not line or len(line) < 2:
         return None
 
-    # 1. Extract quantity: Look for any digits (\d+)
+    # 1. Extract quantity (finds digits anywhere in the line)
     nums = re.findall(r'\d+', line)
     quantity = int(nums[0]) if nums else 1
     
-    # 2. Clean item name: Remove digits and common separators like dashes
+    # 2. Clean item name (remove digits and dashes)
     item_clean = re.sub(r'\d+', '', line)
     item_clean = item_clean.replace('-', ' ').strip()
     
     if not item_clean:
         return None
 
-    # 3. Fuzzy Match against the database keys
+    # 3. Fuzzy Match against the database
     choices = list(price_dict.keys())
     if not choices:
         return None
         
     match, score = process.extractOne(item_clean, choices)
     
-    # 70 threshold to catch misspellings/partial names
+    # Threshold set to 70 to catch typos while staying accurate
     if score >= 70:
         price = price_dict[match]
         return {
             "Item": match, 
             "Qty": quantity, 
-            "Unit Price": f"{price:,}", 
-            "Total": quantity * price,
-            "Raw_Total": quantity * price # Used for summing
+            "Unit Price": price, 
+            "Total": quantity * price
         }
     return None
 
@@ -59,9 +58,7 @@ def render_tab(df_key, price_dict, type_label):
     
     input_text = st.text_area(f"Paste {type_label} list here:", height=150, key=f"text_{df_key}")
     
-    col1, col2 = st.columns([1, 4])
-    
-    if col1.button(f"🚀 Process {type_label}"):
+    if st.button(f"🚀 Process {type_label}", key=f"btn_{df_key}"):
         lines = input_text.split('\n')
         results = []
         for line in lines:
@@ -72,25 +69,32 @@ def render_tab(df_key, price_dict, type_label):
         if results:
             st.session_state[df_key] = pd.DataFrame(results)
         else:
-            st.warning("No matches found. Check your item names or price list.")
+            st.warning("No matches found. Ensure items are in your prices.json.")
 
-    if not st.session_state[df_key].empty:
-        # Display the table
-        st.table(st.session_state[df_key][["Item", "Qty", "Unit Price", "Total"]])
+    # SAFETY CHECK: Only display the table if the dataframe has the required columns
+    df = st.session_state[df_key]
+    if not df.empty and "Item" in df.columns:
+        # Display the table with nice formatting
+        formatted_df = df.copy()
+        formatted_df["Unit Price"] = formatted_df["Unit Price"].apply(lambda x: f"{x:,}")
+        formatted_df["Total"] = formatted_df["Total"].apply(lambda x: f"{x:,}")
         
-        # Calculate and show Total
-        total_sum = st.session_state[df_key]["Raw_Total"].sum()
-        st.metric(label=f"Total {type_label} Value", value=f"{total_sum:,}")
+        st.table(formatted_df[["Item", "Qty", "Unit Price", "Total"]])
+        
+        # Calculate Total Sum
+        total_sum = df["Total"].sum()
+        st.success(f"### Total {type_label} Value: {total_sum:,}")
 
 # --- MAIN APP ---
 def main():
     st.title("⚖️ Cyber Trader Economy Suite")
     
     data = load_prices()
+    # Support both "WE_BUY" and "WE_SELL" formats
     WE_BUY = data.get("WE_BUY", {})
     WE_SELL = data.get("WE_SELL", {})
 
-    # Initialize session states for dataframes
+    # Initialize dataframes in session state if they don't exist
     if 'buy_df' not in st.session_state:
         st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state:
