@@ -93,7 +93,6 @@ st.sidebar.markdown("Set a temporary special price for a specific item.")
 special_item_active = st.sidebar.checkbox("Enable Special Price")
 special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
 
-# Price Input
 special_price_input = st.sidebar.text_input("Special Price", value="0")
 
 try:
@@ -167,7 +166,6 @@ def smart_parse_line(line, price_dict):
 def render_tab(df_key, price_dict, type_label):
     st.subheader(f"📊 {type_label} Calculation")
     
-    # IMPORTANT: We assign a specific key here (e.g., text_buy_df)
     input_text = st.text_area(f"Paste {type_label} list here:", height=150, key=f"text_{df_key}")
     
     if st.button(f"🚀 Process {type_label}", key=f"btn_{df_key}"):
@@ -194,6 +192,17 @@ def render_tab(df_key, price_dict, type_label):
         total_sum = df["Total"].sum()
         st.success(f"### Total {type_label} Value: {total_sum:,}")
 
+# --- CALLBACK FUNCTION TO CLEAR DATA SAFELY ---
+def clear_state():
+    # Clear the dataframes
+    st.session_state.buy_df = pd.DataFrame()
+    st.session_state.sell_df = pd.DataFrame()
+    
+    # Clear the text input widgets
+    # This works safely because it runs BEFORE the page redraws
+    st.session_state["text_buy_df"] = ""
+    st.session_state["text_sell_df"] = ""
+
 # --- MAIN APP ---
 def main():
     set_theme()
@@ -219,18 +228,8 @@ def main():
     with tab2:
         render_tab("sell_df", WE_SELL, "Cost")
 
-    # --- UPDATED CLEAR LOGIC ---
-    if st.button("🗑️ Clear All"):
-        # 1. Clear Dataframes
-        st.session_state.buy_df = pd.DataFrame()
-        st.session_state.sell_df = pd.DataFrame()
-        
-        # 2. Force Clear the Text Areas by key
-        # (Streamlit widgets hold state unless explicitly reset)
-        st.session_state["text_buy_df"] = ""
-        st.session_state["text_sell_df"] = ""
-        
-        st.rerun()
+    # The Logic Fix: We use 'on_click' to trigger the safe clear function
+    st.button("🗑️ Clear All", on_click=clear_state)
 
 if __name__ == "__main__":
     main()
