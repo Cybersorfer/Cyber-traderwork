@@ -120,7 +120,7 @@ def load_prices():
 def smart_parse_line(line, price_dict):
     """
     Parses a single line. 
-    INCLUDES: Smart Quantity, Exact Match, and The Length Guard.
+    INCLUDES: Smart Quantity, Exact Match, and Substring Guard.
     """
     line = line.lower().strip()
     
@@ -171,8 +171,8 @@ def smart_parse_line(line, price_dict):
             "Unit Price": price, 
             "Total": quantity * price
         }
-    
-    # 5. FUZZY MATCH with LENGTH GUARD
+
+    # 5. FUZZY MATCH with SUBSTRING GUARD
     choices = list(price_dict.keys())
     if not choices:
         return None
@@ -183,12 +183,12 @@ def smart_parse_line(line, price_dict):
     if score < 80:
         return None
 
-    # RULE B: THE LENGTH GUARD (Anti-Bear Pelt Logic)
-    # If input is short (<= 4 chars) and match is excessively long (> 2x input), REJECT IT.
-    # Ex: "LAR" (3) vs "Bear Pelt" (9). 9 > 6. REJECTED.
-    # Ex: "M16" (3) vs "M16-A2" (6). 6 > 6? No. ACCEPTED.
-    if len(item_clean) <= 4 and len(match) > len(item_clean) * 2:
-        return None
+    # RULE B: THE SUBSTRING GUARD
+    # If the input is short (<= 4 chars), ONLY accept if the input is INSIDE the match.
+    # Ex: "LAR" is inside "FAL (LAR)" (Accept). "LAR" is NOT inside "Bear Pelt" (Reject).
+    if len(item_clean) <= 4:
+        if item_clean not in match.lower():
+            return None
 
     # If it survived the guards, return the match
     price = price_dict[match]
