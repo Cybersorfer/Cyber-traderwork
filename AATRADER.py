@@ -16,7 +16,8 @@ ALIASES = {
     "m4": "M4-A1",      
     "ak": "KA-74",      
     "vs": "VSS",
-    "weed": "cannabis seeds" # Added this just in case
+    "weed": "cannabis seeds",
+    "cannabis": "cannabis seeds" # Helps find it if named differently
 }
 
 # --- JUNK WORD REMOVER ---
@@ -64,29 +65,6 @@ def load_prices():
     except Exception:
         return {"WE_BUY": {}, "WE_SELL": {}}
 
-def detect_intent_and_clean(line):
-    line_lower = line.lower()
-    intent = "NEUTRAL" 
-    
-    # 1. Check for BUY (Cost)
-    buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need"]
-    for kw in buy_keywords:
-        if kw in line_lower:
-            intent = "PLAYER_BUYS"
-            line = re.sub(kw, "", line, flags=re.IGNORECASE)
-            break
-            
-    # 2. Check for SELL (Payout)
-    sell_keywords = ["want to sell", "selling", "wts", "i have", "have"]
-    if intent == "NEUTRAL":
-        for kw in sell_keywords:
-            if kw in line_lower:
-                intent = "PLAYER_SELLS"
-                line = re.sub(kw, "", line, flags=re.IGNORECASE)
-                break
-                
-    return intent, line
-
 def clean_text(text):
     # Removes special chars but keeps separators
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
@@ -114,8 +92,7 @@ def smart_parse_line(line, price_dict):
         quantity = int(match_end.group(2))
         item_clean = match_end.group(1).strip()
 
-    # 3. FILLER REMOVAL (The Fix for "Pack of Cigarettes")
-    # We remove "pack of", "cr550" etc so the fuzzy matcher sees just "Cigarettes"
+    # 3. FILLER REMOVAL
     for filler in FILLERS:
         item_clean = item_clean.replace(filler, "").strip()
 
@@ -128,7 +105,6 @@ def smart_parse_line(line, price_dict):
 
     # 5. Special Item Check
     if 'special_name' in globals() and special_name and special_name.lower() in item_clean.lower():
-        # Ensure promo is actually active before matching
         if 'special_item_active' in globals() and special_item_active:
              return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
 
@@ -154,45 +130,74 @@ def smart_parse_line(line, price_dict):
     if score < 85:
         return None
 
-    # GUARD B: Short Word Safety (Anti-Bear Pelt)
+    # GUARD B: Short Word Safety
     if len(item_clean) <= 4:
         if item_clean.lower() not in match.lower():
             return None 
 
-    # GUARD C: Length Deviation (RELAXED)
-    # Since we stripped fillers, we can be stricter.
-    # But if the score is VERY high (95+), we trust it even if lengths differ.
+    # GUARD C: Length Deviation (Relaxed)
     if score < 95:
         if len(item_clean) > len(match) + 6:
             return None
 
     return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
 
+def detect_intent(line):
+    line_lower = line.lower()
+    
+    # Check for BUY (Cost)
+    buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need"]
+    for kw in buy_keywords:
+        if kw in line_lower:
+            return "PLAYER_BUYS", kw # Return intent AND the keyword to strip
+            
+    # Check for SELL (Payout)
+    sell_keywords = ["want to sell", "selling", "wts", "i have", "have"]
+    for kw in sell_keywords:
+        if kw in line_lower:
+            return "PLAYER_SELLS", kw
+
+    return "NEUTRAL", ""
+
 def process_text_block(input_text, price_dict_buy, price_dict_sell):
-    # 1. Normalize commas
-    normalized_text = input_text.replace(',', '\n')
-    lines = normalized_text.split('\n')
+    # CRITICAL FIX: Split by newlines FIRST, then process commas per line.
+    # This preserves the "Want to buy" context for the whole line.
+    
+    raw_lines = input_text.split('\n')
     
     new_payout_items = []
     new_cost_items = []
     
-    for line in lines:
-        if not line.strip(): continue
+    for raw_line in raw_lines:
+        if not raw_line.strip(): continue
         
-        intent, cleaned_line = detect_intent_and_clean(line)
+        # 1. Detect Intent for this WHOLE line
+        intent, keyword = detect_intent(raw_line)
         
-        target_list = "PAYOUT" 
-        if intent == "PLAYER_BUYS":
-            target_list = "COST"
-            parsed = smart_parse_line(cleaned_line, price_dict_sell)
-        else:
-            parsed = smart_parse_line(cleaned_line, price_dict_buy)
+        # 2. Remove the keyword (e.g. "Want to buy") so it doesn't mess up the first item
+        clean_line_base = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
+        
+        # 3. NOW split by commas
+        comma_parts = clean_line_base.split(',')
+        
+        # 4. Process each part using the Line's Intent
+        for part in comma_parts:
+            part = part.strip()
+            if not part: continue
             
-        if parsed:
-            if target_list == "COST":
-                new_cost_items.append(parsed)
+            # Default to Payout if Neutral
+            target_list = "PAYOUT"
+            if intent == "PLAYER_BUYS":
+                target_list = "COST"
+                parsed = smart_parse_line(part, price_dict_sell)
             else:
-                new_payout_items.append(parsed)
+                parsed = smart_parse_line(part, price_dict_buy)
+                
+            if parsed:
+                if target_list == "COST":
+                    new_cost_items.append(parsed)
+                else:
+                    new_payout_items.append(parsed)
                 
     return new_payout_items, new_cost_items
 
@@ -257,11 +262,25 @@ def main():
     
     if st.button("🚀 Process Ticket"):
         payouts, costs = process_text_block(input_text, WE_BUY, WE_SELL)
-        
         st.session_state.buy_df = pd.DataFrame(payouts) if payouts else pd.DataFrame()
         st.session_state.sell_df = pd.DataFrame(costs) if costs else pd.DataFrame()
 
     render_result_tables()
+    
+    # DEBUGGER: Search Tool
+    with st.expander("🕵️ Debug: Search Price Database"):
+        st.write("Can't find an item? Search here to see its exact name in your file.")
+        search_q = st.text_input("Search Item Name")
+        if search_q:
+            # Search Buy Keys
+            hits_buy = [k for k in WE_BUY.keys() if search_q.lower() in str(k).lower()]
+            # Search Sell Keys
+            hits_sell = [k for k in WE_SELL.keys() if search_q.lower() in str(k).lower()]
+            
+            if hits_buy: st.write(f"**Found in WE BUY:** {hits_buy}")
+            if hits_sell: st.write(f"**Found in WE SELL:** {hits_sell}")
+            if not hits_buy and not hits_sell: st.warning("Not found in either list.")
+
     st.button("🗑️ Clear All", on_click=clear_state)
 
 if __name__ == "__main__":
