@@ -23,7 +23,6 @@ def get_pst_today():
     return get_pst_now().date()
 
 # --- ALIAS LIST ---
-# Maps user inputs (lowercase) to the EXACT name in your JSON
 ALIASES = {
     "lar": "LAR",       
     "m16": "M16",       
@@ -32,10 +31,13 @@ ALIASES = {
     "vs": "VSS",
     "weed": "cannabis seeds",
     "seeds": "cannabis seeds",
-    # NEW FIXES
     "large tents": "Large Tent",
+    "large tent": "Large Tent",
+    "medium tent": "Medium Tent",
+    "canopy tent": "Canopy Tent",
     "sea chests": "Seachest",
     "sea chest": "Seachest",
+    "seachests": "Seachest",
     "blue barrel": "Barrel",
     "green barrel": "Barrel",
     "red barrel": "Barrel",
@@ -46,7 +48,7 @@ ALIASES = {
 FILLERS = [
     "pack of", "packs of", "box of", "can of",
     "cr550", "item of the week", "for the",
-    "stored in", "inside", "would like to" # Added to clean sentence structure
+    "stored in", "inside", "would like to"
 ]
 
 # --- CUSTOM CSS ---
@@ -174,50 +176,61 @@ def smart_parse_line(line, price_dict):
 
     return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
 
-def detect_intent(line):
+def check_mode_switch(line):
+    # Detects if the line is a header switching the mode
     line_lower = line.lower()
     
-    # EXPANDED BUY LIST: Now includes "would like to"
+    # BUY MODE TRIGGERS
     buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need", "would like to buy", "would like to order"]
     for kw in buy_keywords:
-        if kw in line_lower: return "PLAYER_BUYS", kw
-        
-    sell_keywords = ["want to sell", "selling", "wts", "i have", "have"]
+        if kw in line_lower: 
+            return "COST", kw # Returns New Mode + The keyword to strip
+            
+    # SELL MODE TRIGGERS
+    sell_keywords = ["want to sell", "selling", "wts", "i have", "have", "would like to sell"]
     for kw in sell_keywords:
-        if kw in line_lower: return "PLAYER_SELLS", kw
-        
-    return "NEUTRAL", ""
+        if kw in line_lower: 
+            return "PAYOUT", kw
+            
+    return None, None
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell):
     raw_lines = input_text.split('\n')
     new_payout_items = []
     new_cost_items = []
     
+    # STICKY MODE: Default to Payout (Selling) unless told otherwise
+    current_mode = "PAYOUT" 
+    
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
         
-        # Intent detection runs on the WHOLE line first
-        intent, keyword = detect_intent(raw_line)
+        # 1. Check if this line changes the mode (e.g. "Would like to buy")
+        new_mode, keyword = check_mode_switch(raw_line)
         
-        # Remove the intent keyword so it doesn't mess up the first item name
-        clean_line_base = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
-        
-        comma_parts = clean_line_base.split(',')
+        if new_mode:
+            current_mode = new_mode
+            # Remove the trigger phrase from this line so we can check if there are items on the same line
+            # e.g. "Want to buy 1x Apple" -> Becomes "1x Apple"
+            line_content = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
+        else:
+            # No mode change, use the sticky mode from previous lines
+            line_content = raw_line
+
+        # 2. Process the content (Split by commas)
+        comma_parts = line_content.split(',')
         
         for part in comma_parts:
             part = part.strip()
             if not part: continue
             
-            target_list = "PAYOUT"
-            if intent == "PLAYER_BUYS":
-                target_list = "COST"
+            # 3. Route to the correct DB based on Current Mode
+            if current_mode == "COST":
                 parsed = smart_parse_line(part, price_dict_sell)
+                if parsed: new_cost_items.append(parsed)
             else:
                 parsed = smart_parse_line(part, price_dict_buy)
-                
-            if parsed:
-                if target_list == "COST": new_cost_items.append(parsed)
-                else: new_payout_items.append(parsed)
+                if parsed: new_payout_items.append(parsed)
                 
     return new_payout_items, new_cost_items
 
