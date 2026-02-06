@@ -27,7 +27,6 @@ def get_pst_today():
     return get_pst_now().date()
 
 # --- ALIAS LIST ---
-# Maps user inputs (lowercase) to the EXACT name in your JSON
 ALIASES = {
     # Weapons & Ammo
     "lar": "LAR",
@@ -46,7 +45,6 @@ ALIASES = {
     "electronic repair kit": "Electronic Repair Kit",
 
     # --- MAGNIFYING SCOPES ($5,000) ---
-    "4x32  scopes": "All magnifying scopes",
     "4x32 scopes": "All magnifying scopes",
     "4x32 scope": "All magnifying scopes",
     "4x32": "All magnifying scopes",
@@ -113,7 +111,6 @@ ALIASES = {
 }
 
 # --- JUNK WORD REMOVER ---
-# Words to strip out entirely
 FILLERS = [
     "pack of", "packs of", "box of", "can of",
     "cr550", "item of the week", "for the",
@@ -122,7 +119,6 @@ FILLERS = [
 ]
 
 # --- VARIANT STRIPPER ---
-# Words to remove if the item isn't found (Colors, variants)
 VARIANTS = [
     "(black)", "(green)", "(tan)", "(camo)", "(winter)", "(summer)", 
     "(pink)", "(blue)", "(red)", "(yellow)", "(white)", "(grey)", "(gray)",
@@ -172,6 +168,15 @@ def set_theme():
         tbody tr:hover { background-color: #1E1E1E !important; }
         td { color: #E0E0E0 !important; }
         [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #4CAF50 !important; }
+        
+        /* Missing Item Box */
+        .missing-box {
+            background-color: #331111;
+            border: 1px solid #FF4444;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -195,35 +200,27 @@ def save_all_promos(data):
     with open(PROMO_FILE, 'w') as f: json.dump(data, f)
 
 def clean_noise(text):
-    # 1. Remove Dollar amounts (e.g. $25,000, $500)
     text = re.sub(r'\$[\d,]+', '', text)
-    # 2. Remove equations (e.g. = $50,000)
     text = re.sub(r'=\s*[\d,]+', '', text)
-    # 3. Remove "Grand Total" lines
     if "total" in text.lower(): return ""
-    # 4. Standard clean (Keep () and - and . for items like "Bolts (Stack of 5)")
     return re.sub(r'[^a-zA-Z0-9\-\.\(\) ]', '', text)
 
 def strip_variants(text):
-    # Removes (Black), (Winter), etc.
     text_lower = text.lower()
     for v in VARIANTS:
         text_lower = text_lower.replace(v, "")
-    # Remove empty parens ()
     text_lower = text_lower.replace("()", "").strip()
     return text_lower
 
 def smart_parse_line(line, price_dict, promo_info):
     if "locker code" in line.lower() or "combo" in line.lower(): return None
 
-    # Step 1: Basic Clean
     line = clean_noise(line).strip()
     if not line or len(line) < 2: return None
 
     quantity = 1
     item_clean = line
 
-    # Extraction Logic (Qty + Item)
     match_start = re.match(r'^(\d+)\s*[xX\-\.]?\s*(.*)', line)
     match_end = re.search(r'(.*)\s+[xX\-\.]?\s*(\d+)$', line)
 
@@ -234,15 +231,14 @@ def smart_parse_line(line, price_dict, promo_info):
         quantity = int(match_end.group(2))
         item_clean = match_end.group(1).strip()
 
-    # Step 2: Remove Filler Words
     for filler in FILLERS:
         item_clean = item_clean.replace(filler, "").strip()
 
-    # Step 3: Check Aliases (First Pass)
     if item_clean.lower() in ALIASES:
         item_clean = ALIASES[item_clean.lower()]
 
     # --- MATCHING LOGIC ---
+    # Return FOUND=True if match, FOUND=False if not
     
     # 1. PROMO MATCH
     s_active = promo_info.get("active", False)
@@ -252,32 +248,35 @@ def smart_parse_line(line, price_dict, promo_info):
 
     if (s_name and s_name.lower() in item_clean.lower()):
         if s_active and get_pst_today() <= s_expiry:
-             return {"Item": f"🔥 {s_name}", "Qty": quantity, "Unit Price": s_price, "Total": quantity * s_price}
+             return {"Item": f"🔥 {s_name}", "Qty": quantity, "Unit Price": s_price, "Total": quantity * s_price, "Found": True}
 
     exact_map = {str(k).lower(): str(k) for k in price_dict if k}
     
-    # 2. EXACT MATCH (Try 1: As Is)
+    # 2. EXACT MATCH
     if item_clean.lower() in exact_map:
         real_key = exact_map[item_clean.lower()]
-        return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key]}
+        return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key], "Found": True}
 
-    # 3. VARIANT STRIP MATCH (Try 2: Remove Colors)
+    # 3. VARIANT STRIP MATCH
     item_no_variant = strip_variants(item_clean)
     if item_no_variant in exact_map:
         real_key = exact_map[item_no_variant]
-        return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key]}
+        return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key], "Found": True}
 
     # 4. FUZZY MATCH
     choices = [str(k) for k in price_dict.keys() if k]
-    if not choices: return None
+    if not choices: 
+        return {"Item": item_clean, "Qty": quantity, "Unit Price": 0, "Total": 0, "Found": False}
     
-    # Try fuzzy on the CLEAN version (No Variants)
     match, score = process.extractOne(item_no_variant, choices)
     
-    if score < 85: return None
-    if len(item_no_variant) <= 4 and item_no_variant not in match.lower(): return None 
+    # GUARD: Failed Match
+    if score < 85: 
+        return {"Item": item_clean, "Qty": quantity, "Unit Price": 0, "Total": 0, "Found": False}
+    if len(item_no_variant) <= 4 and item_no_variant not in match.lower(): 
+        return {"Item": item_clean, "Qty": quantity, "Unit Price": 0, "Total": 0, "Found": False}
     
-    return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
+    return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match], "Found": True}
 
 def check_mode_switch(line):
     line_lower = line.lower()
@@ -301,12 +300,12 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     raw_lines = input_text.split('\n')
     new_payout_items = []
     new_cost_items = []
+    new_missing_items = []
     current_mode = "PAYOUT" 
     
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
         
-        # 1. Check for Mode Switch
         new_mode, keyword = check_mode_switch(raw_line)
         if new_mode:
             current_mode = new_mode
@@ -314,7 +313,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
         else:
             line_content = raw_line
 
-        # 2. Split by commas
         comma_parts = line_content.split(',')
         
         for part in comma_parts:
@@ -323,14 +321,33 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             
             if current_mode == "COST":
                 parsed = smart_parse_line(part, price_dict_sell, promo_info)
-                if parsed: new_cost_items.append(parsed)
+                if parsed:
+                    if parsed["Found"]:
+                        new_cost_items.append(parsed)
+                    else:
+                        new_missing_items.append(parsed)
             else:
                 parsed = smart_parse_line(part, price_dict_buy, promo_info)
-                if parsed: new_payout_items.append(parsed)
+                if parsed:
+                    if parsed["Found"]:
+                        new_payout_items.append(parsed)
+                    else:
+                        new_missing_items.append(parsed)
                 
-    return new_payout_items, new_cost_items
+    return new_payout_items, new_cost_items, new_missing_items
 
 def render_result_tables():
+    # --- MISSING ITEMS SECTION ---
+    if 'missing_df' in st.session_state and not st.session_state.missing_df.empty:
+        st.warning("⚠️ **Items Not Found / No Price:**")
+        st.markdown("The following items could not be found in the database. Please check spelling or add them to your JSON file.")
+        
+        m_df = st.session_state.missing_df
+        # Display simple table for missing items
+        st.table(m_df[["Item", "Qty"]])
+        st.markdown("---")
+
+    # --- PAYOUT SECTION ---
     st.subheader("💰 Payout (We Buy)")
     if 'buy_df' in st.session_state and not st.session_state.buy_df.empty:
         df = st.session_state.buy_df
@@ -345,6 +362,7 @@ def render_result_tables():
 
     st.markdown("---")
 
+    # --- COST SECTION ---
     st.subheader("🛒 Cost (We Sell)")
     if 'sell_df' in st.session_state and not st.session_state.sell_df.empty:
         df = st.session_state.sell_df
@@ -360,6 +378,7 @@ def render_result_tables():
 def clear_state():
     st.session_state.buy_df = pd.DataFrame()
     st.session_state.sell_df = pd.DataFrame()
+    st.session_state.missing_df = pd.DataFrame()
     st.session_state["master_input"] = ""
 
 def main():
@@ -420,6 +439,7 @@ def main():
 
     if 'buy_df' not in st.session_state: st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state: st.session_state.sell_df = pd.DataFrame()
+    if 'missing_df' not in st.session_state: st.session_state.missing_df = pd.DataFrame()
 
     st.markdown("### 📜 Smart Trade Processor")
     st.markdown(f"Paste your **{selected_map} ticket** here. The AI will sort buys vs sells automatically.")
@@ -427,9 +447,10 @@ def main():
     input_text = st.text_area("Paste Chat Log / Ticket:", height=200, key="master_input")
     
     if st.button("🚀 Process Ticket"):
-        payouts, costs = process_text_block(input_text, WE_BUY, WE_SELL, promo_info_package)
+        payouts, costs, missing = process_text_block(input_text, WE_BUY, WE_SELL, promo_info_package)
         st.session_state.buy_df = pd.DataFrame(payouts) if payouts else pd.DataFrame()
         st.session_state.sell_df = pd.DataFrame(costs) if costs else pd.DataFrame()
+        st.session_state.missing_df = pd.DataFrame(missing) if missing else pd.DataFrame()
 
     render_result_tables()
     
