@@ -16,15 +16,14 @@ PROMO_FILE = 'promo.json'
 
 # --- TIMEZONE CONFIG (PST LOCK) ---
 def get_pst_now():
-    # Returns the full datetime object for PST
     pst = pytz.timezone('US/Pacific')
     return datetime.now(pst)
 
 def get_pst_today():
-    # Returns just the date part
     return get_pst_now().date()
 
 # --- ALIAS LIST ---
+# Maps user inputs (lowercase) to the EXACT name in your JSON
 ALIASES = {
     "lar": "LAR",       
     "m16": "M16",       
@@ -32,14 +31,22 @@ ALIASES = {
     "ak": "KA-74",      
     "vs": "VSS",
     "weed": "cannabis seeds",
-    "seeds": "cannabis seeds"
+    "seeds": "cannabis seeds",
+    # NEW FIXES
+    "large tents": "Large Tent",
+    "sea chests": "Seachest",
+    "sea chest": "Seachest",
+    "blue barrel": "Barrel",
+    "green barrel": "Barrel",
+    "red barrel": "Barrel",
+    "yellow barrel": "Barrel"
 }
 
 # --- JUNK WORD REMOVER ---
 FILLERS = [
     "pack of", "packs of", "box of", "can of",
     "cr550", "item of the week", "for the",
-    "stored in", "inside"
+    "stored in", "inside", "would like to" # Added to clean sentence structure
 ]
 
 # --- CUSTOM CSS ---
@@ -50,20 +57,15 @@ def set_theme():
         section[data-testid="stSidebar"] { background-color: #262730; }
         section[data-testid="stSidebar"] * { color: #FAFAFA !important; }
         
-        /* INPUT LABEL COLOR */
         .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label {
             color: #B0B0B0 !important; font-size: 1rem; font-weight: bold;
         }
-        
-        /* STANDARD INPUT BOXES */
         .stTextArea textarea, .stTextInput input, .stNumberInput input {
             background-color: #1E1E1E !important; 
             color: #00FF00 !important;
             border: 1px solid #4CAF50; 
             caret-color: #00FF00;
         }
-        
-        /* DATE INPUT FIX */
         input[type="date"] {
             background-color: #1E1E1E !important;
             color: #00FF00 !important;
@@ -74,14 +76,12 @@ def set_theme():
             background-color: #1E1E1E !important;
             border-color: #4CAF50 !important;
         }
-        
         .stButton>button {
             color: #FAFAFA; background-color: #262730; border: 1px solid #4CAF50; transition: all 0.3s ease;
         }
         .stButton>button:hover {
             background-color: #4CAF50; color: #000000; box-shadow: 0 0 10px #4CAF50;
         }
-        
         table { color: #E0E0E0 !important; background-color: transparent !important; border-collapse: collapse; width: 100%; }
         thead tr th { background-color: #262730 !important; color: #00FF00 !important; border-bottom: 2px solid #4CAF50 !important; }
         tbody tr { border-bottom: 1px solid #333 !important; }
@@ -116,8 +116,7 @@ def clean_text(text):
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
 
 def smart_parse_line(line, price_dict):
-    if "locker code" in line.lower() or "combo" in line.lower():
-        return None
+    if "locker code" in line.lower() or "combo" in line.lower(): return None
 
     line = clean_text(line).lower().strip()
     if not line or len(line) < 2: return None
@@ -177,12 +176,16 @@ def smart_parse_line(line, price_dict):
 
 def detect_intent(line):
     line_lower = line.lower()
-    buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need"]
+    
+    # EXPANDED BUY LIST: Now includes "would like to"
+    buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need", "would like to buy", "would like to order"]
     for kw in buy_keywords:
         if kw in line_lower: return "PLAYER_BUYS", kw
+        
     sell_keywords = ["want to sell", "selling", "wts", "i have", "have"]
     for kw in sell_keywords:
         if kw in line_lower: return "PLAYER_SELLS", kw
+        
     return "NEUTRAL", ""
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell):
@@ -192,8 +195,13 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell):
     
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
+        
+        # Intent detection runs on the WHOLE line first
         intent, keyword = detect_intent(raw_line)
+        
+        # Remove the intent keyword so it doesn't mess up the first item name
         clean_line_base = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
+        
         comma_parts = clean_line_base.split(',')
         
         for part in comma_parts:
@@ -254,7 +262,6 @@ def main():
     
     # Sidebar
     st.sidebar.header("🔥 Item of the Week")
-    
     global special_name, special_price, special_item_active, expiry_date
     
     special_item_active = st.sidebar.checkbox("Enable Special Price", value=promo_data.get("active", False))
@@ -262,21 +269,16 @@ def main():
     special_price_val = st.sidebar.text_input("Special Price", value=str(promo_data.get("price", 0)))
     
     saved_date_str = promo_data.get("expiry", str(get_pst_today()))
-    try:
-        default_date = date.fromisoformat(saved_date_str)
-    except:
-        default_date = get_pst_today()
+    try: default_date = date.fromisoformat(saved_date_str)
+    except: default_date = get_pst_today()
         
     expiry_date = st.sidebar.date_input("Offer Ends On", value=default_date, min_value=get_pst_today())
     
     try: special_price = int(special_price_val)
     except: special_price = 0
 
-    # --- CLOCK & SAVE BUTTON ---
-    # Display current PST time cleanly
+    # CLOCK
     pst_time_str = get_pst_now().strftime("%I:%M %p")
-    
-    # Custom HTML for readable time display
     st.sidebar.markdown(f"""
         <div style="margin-bottom: 10px; margin-top: 10px;">
             <b style="color: #B0B0B0; font-size: 1rem;">🕒 Server Time(PST):</b> 
@@ -286,12 +288,7 @@ def main():
         """, unsafe_allow_html=True)
     
     if st.sidebar.button("🔄 Update Promo"):
-        new_data = {
-            "active": special_item_active,
-            "name": special_name,
-            "price": special_price,
-            "expiry": str(expiry_date)
-        }
+        new_data = {"active": special_item_active, "name": special_name, "price": special_price, "expiry": str(expiry_date)}
         save_promo(new_data)
         st.success("Saved!")
         st.rerun()
