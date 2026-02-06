@@ -1,12 +1,24 @@
 import streamlit as st
 import re
 import json
+import os
 import pandas as pd
-from datetime import date
+import pytz 
+from datetime import datetime, date # Updated imports for Timezone handling
 from thefuzz import process
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
+
+# --- FILE PATHS ---
+PRICES_FILE = 'prices.json'
+PROMO_FILE = 'promo.json'
+
+# --- TIMEZONE CONFIG (PST LOCK) ---
+def get_pst_today():
+    # Forces the app to see "Today" as Pacific Time, regardless of server location
+    pst = pytz.timezone('US/Pacific')
+    return datetime.now(pst).date()
 
 # --- ALIAS LIST ---
 ALIASES = {
@@ -55,13 +67,26 @@ def set_theme():
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGIC FUNCTIONS ---
+# --- SAVE/LOAD FUNCTIONS ---
 def load_prices():
     try:
-        with open('prices.json', 'r') as f:
+        with open(PRICES_FILE, 'r') as f:
             return json.load(f)
     except Exception:
         return {"WE_BUY": {}, "TRADER_SELLS": {}}
+
+def load_promo():
+    if os.path.exists(PROMO_FILE):
+        try:
+            with open(PROMO_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {"active": False, "name": "", "price": 0, "expiry": str(get_pst_today())}
+
+def save_promo(data):
+    with open(PROMO_FILE, 'w') as f:
+        json.dump(data, f)
 
 def clean_text(text):
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
@@ -95,8 +120,15 @@ def smart_parse_line(line, price_dict):
     else:
         is_aliased = False
 
-    if 'special_name' in globals() and special_name and special_name.lower() in item_clean.lower():
-        if 'special_item_active' in globals() and special_item_active:
+    # --- SPECIAL ITEM LOGIC (PST CHECK) ---
+    if ('special_name' in globals() and special_name and 
+        special_name.lower() in item_clean.lower()):
+        
+        is_active = globals().get('special_item_active', False)
+        exp_date = globals().get('expiry_date', get_pst_today())
+        
+        # Compare against PST Today
+        if is_active and get_pst_today() <= exp_date:
              return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
 
     exact_map = {str(k).lower(): str(k) for k in price_dict if k}
@@ -115,14 +147,8 @@ def smart_parse_line(line, price_dict):
     match, score = process.extractOne(item_clean, choices)
     
     if score < 85: return None
-
-    if len(item_clean) <= 4:
-        if item_clean.lower() not in match.lower():
-            return None 
-
-    if score < 95:
-        if len(item_clean) > len(match) + 6:
-            return None
+    if len(item_clean) <= 4 and item_clean.lower() not in match.lower(): return None 
+    if score < 95 and len(item_clean) > len(match) + 6: return None
 
     return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
 
@@ -130,14 +156,10 @@ def detect_intent(line):
     line_lower = line.lower()
     buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need"]
     for kw in buy_keywords:
-        if kw in line_lower:
-            return "PLAYER_BUYS", kw
-            
+        if kw in line_lower: return "PLAYER_BUYS", kw
     sell_keywords = ["want to sell", "selling", "wts", "i have", "have"]
     for kw in sell_keywords:
-        if kw in line_lower:
-            return "PLAYER_SELLS", kw
-
+        if kw in line_lower: return "PLAYER_SELLS", kw
     return "NEUTRAL", ""
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell):
@@ -147,7 +169,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell):
     
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
-        
         intent, keyword = detect_intent(raw_line)
         clean_line_base = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
         comma_parts = clean_line_base.split(',')
@@ -164,10 +185,8 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell):
                 parsed = smart_parse_line(part, price_dict_buy)
                 
             if parsed:
-                if target_list == "COST":
-                    new_cost_items.append(parsed)
-                else:
-                    new_payout_items.append(parsed)
+                if target_list == "COST": new_cost_items.append(parsed)
+                else: new_payout_items.append(parsed)
                 
     return new_payout_items, new_cost_items
 
@@ -207,23 +226,43 @@ def main():
     set_theme()
     st.title("⚖️ Cyber Trader Economy Suite")
     
+    # --- LOAD SAVED PROMO DATA ---
+    promo_data = load_promo()
+    
     # Sidebar
     st.sidebar.header("🔥 Item of the Week")
-    global special_name, special_price, special_item_active
-    special_item_active = st.sidebar.checkbox("Enable Special Price")
-    special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)")
-    special_price_val = st.sidebar.text_input("Special Price", value="0")
+    global special_name, special_price, special_item_active, expiry_date
+    
+    special_item_active = st.sidebar.checkbox("Enable Special Price", value=promo_data.get("active", False))
+    special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)", value=promo_data.get("name", ""))
+    special_price_val = st.sidebar.text_input("Special Price", value=str(promo_data.get("price", 0)))
+    
+    # LOAD DATE & FORCE PST CHECK
+    saved_date_str = promo_data.get("expiry", str(get_pst_today()))
+    try:
+        default_date = date.fromisoformat(saved_date_str)
+    except:
+        default_date = get_pst_today()
+        
+    expiry_date = st.sidebar.date_input("Offer Ends On", value=default_date, min_value=get_pst_today())
+    
     try: special_price = int(special_price_val)
     except: special_price = 0
-    expiry_date = st.sidebar.date_input("Offer Ends On", min_value=date.today())
-    if st.sidebar.button("🔄 Update Promo"): st.rerun()
+
+    if st.sidebar.button("🔄 Update Promo"):
+        new_data = {
+            "active": special_item_active,
+            "name": special_name,
+            "price": special_price,
+            "expiry": str(expiry_date)
+        }
+        save_promo(new_data)
+        st.success("Promo Saved!")
+        st.rerun()
 
     data = load_prices()
-    
-    # --- CRITICAL FIX: LOADING THE CORRECT KEY ---
-    # Your JSON uses "TRADER_SELLS", not "WE_SELL"
     WE_BUY = data.get("WE_BUY", {})
-    WE_SELL = data.get("TRADER_SELLS", {}) # <--- Fixed here
+    WE_SELL = data.get("TRADER_SELLS", {})
 
     if 'buy_df' not in st.session_state: st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state: st.session_state.sell_df = pd.DataFrame()
@@ -240,14 +279,12 @@ def main():
 
     render_result_tables()
     
-    # DEBUG SEARCH (Keep this until everything works perfectly)
     with st.expander("🕵️ Debug: Search Price Database"):
         st.write("Check if an item exists in your loaded price list:")
         search_q = st.text_input("Search Item Name")
         if search_q:
             hits_buy = [k for k in WE_BUY.keys() if search_q.lower() in str(k).lower()]
             hits_sell = [k for k in WE_SELL.keys() if search_q.lower() in str(k).lower()]
-            
             if hits_buy: st.write(f"**Found in WE BUY:** {hits_buy}")
             if hits_sell: st.write(f"**Found in WE SELL:** {hits_sell}")
             if not hits_buy and not hits_sell: st.warning("Not found in either list.")
