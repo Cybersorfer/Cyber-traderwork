@@ -8,10 +8,14 @@ from datetime import datetime, date
 from thefuzz import process
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Cyber Trader Suite", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="Cyber Economy Suite", page_icon="🌍", layout="wide")
 
-# --- FILE PATHS ---
-PRICES_FILE = 'prices.json'
+# --- MAP CONFIGURATION ---
+MAPS = {
+    "Chernarus": "prices_chernarus.json",
+    "Livonia": "prices_livonia.json",
+    "Sakhal": "prices_sakhal.json"
+}
 PROMO_FILE = 'promo.json'
 
 # --- TIMEZONE CONFIG (PST LOCK) ---
@@ -22,7 +26,7 @@ def get_pst_now():
 def get_pst_today():
     return get_pst_now().date()
 
-# --- ALIAS LIST ---
+# --- ALIAS LIST (Shared across all maps) ---
 ALIASES = {
     "lar": "LAR",       
     "m16": "M16",       
@@ -59,7 +63,7 @@ def set_theme():
         section[data-testid="stSidebar"] { background-color: #262730; }
         section[data-testid="stSidebar"] * { color: #FAFAFA !important; }
         
-        .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label {
+        .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label, .stSelectbox label {
             color: #B0B0B0 !important; font-size: 1rem; font-weight: bold;
         }
         .stTextArea textarea, .stTextInput input, .stNumberInput input {
@@ -78,6 +82,13 @@ def set_theme():
             background-color: #1E1E1E !important;
             border-color: #4CAF50 !important;
         }
+        /* DROPDOWN MENU FIX */
+        div[data-baseweb="select"] > div {
+            background-color: #1E1E1E !important;
+            color: #00FF00 !important;
+            border-color: #4CAF50 !important;
+        }
+        
         .stButton>button {
             color: #FAFAFA; background-color: #262730; border: 1px solid #4CAF50; transition: all 0.3s ease;
         }
@@ -94,30 +105,33 @@ def set_theme():
     """, unsafe_allow_html=True)
 
 # --- SAVE/LOAD FUNCTIONS ---
-def load_prices():
+def load_prices(map_name):
+    # Loads the specific JSON file for the selected map
+    file_path = MAPS.get(map_name, "prices_chernarus.json")
     try:
-        with open(PRICES_FILE, 'r') as f:
+        with open(file_path, 'r') as f:
             return json.load(f)
     except Exception:
         return {"WE_BUY": {}, "TRADER_SELLS": {}}
 
-def load_promo():
+def load_all_promos():
+    # Loads the master promo file containing data for ALL maps
     if os.path.exists(PROMO_FILE):
         try:
             with open(PROMO_FILE, 'r') as f:
                 return json.load(f)
         except:
             pass
-    return {"active": False, "name": "", "price": 0, "expiry": str(get_pst_today())}
+    return {}
 
-def save_promo(data):
+def save_all_promos(data):
     with open(PROMO_FILE, 'w') as f:
         json.dump(data, f)
 
 def clean_text(text):
     return re.sub(r'[^a-zA-Z0-9\-\. ]', '', text)
 
-def smart_parse_line(line, price_dict):
+def smart_parse_line(line, price_dict, promo_info):
     if "locker code" in line.lower() or "combo" in line.lower(): return None
 
     line = clean_text(line).lower().strip()
@@ -145,15 +159,16 @@ def smart_parse_line(line, price_dict):
     else:
         is_aliased = False
 
-    # --- SPECIAL ITEM LOGIC ---
-    if ('special_name' in globals() and special_name and 
-        special_name.lower() in item_clean.lower()):
-        
-        is_active = globals().get('special_item_active', False)
-        exp_date = globals().get('expiry_date', get_pst_today())
-        
-        if is_active and get_pst_today() <= exp_date:
-             return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
+    # --- SPECIAL ITEM LOGIC (Map Specific) ---
+    # Unpack the promo info passed from the main function
+    s_active = promo_info.get("active", False)
+    s_name = promo_info.get("name", "")
+    s_price = promo_info.get("price", 0)
+    s_expiry = promo_info.get("expiry_date", get_pst_today())
+
+    if (s_name and s_name.lower() in item_clean.lower()):
+        if s_active and get_pst_today() <= s_expiry:
+             return {"Item": f"🔥 {s_name}", "Qty": quantity, "Unit Price": s_price, "Total": quantity * s_price}
 
     exact_map = {str(k).lower(): str(k) for k in price_dict if k}
     search_term = item_clean.lower()
@@ -177,59 +192,42 @@ def smart_parse_line(line, price_dict):
     return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
 
 def check_mode_switch(line):
-    # Detects if the line is a header switching the mode
     line_lower = line.lower()
-    
-    # BUY MODE TRIGGERS
     buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need", "would like to buy", "would like to order"]
     for kw in buy_keywords:
-        if kw in line_lower: 
-            return "COST", kw # Returns New Mode + The keyword to strip
-            
-    # SELL MODE TRIGGERS
+        if kw in line_lower: return "COST", kw
     sell_keywords = ["want to sell", "selling", "wts", "i have", "have", "would like to sell"]
     for kw in sell_keywords:
-        if kw in line_lower: 
-            return "PAYOUT", kw
-            
+        if kw in line_lower: return "PAYOUT", kw
     return None, None
 
-def process_text_block(input_text, price_dict_buy, price_dict_sell):
+def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     raw_lines = input_text.split('\n')
     new_payout_items = []
     new_cost_items = []
-    
-    # STICKY MODE: Default to Payout (Selling) unless told otherwise
     current_mode = "PAYOUT" 
     
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
         
-        # 1. Check if this line changes the mode (e.g. "Would like to buy")
         new_mode, keyword = check_mode_switch(raw_line)
-        
         if new_mode:
             current_mode = new_mode
-            # Remove the trigger phrase from this line so we can check if there are items on the same line
-            # e.g. "Want to buy 1x Apple" -> Becomes "1x Apple"
             line_content = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
         else:
-            # No mode change, use the sticky mode from previous lines
             line_content = raw_line
 
-        # 2. Process the content (Split by commas)
         comma_parts = line_content.split(',')
         
         for part in comma_parts:
             part = part.strip()
             if not part: continue
             
-            # 3. Route to the correct DB based on Current Mode
             if current_mode == "COST":
-                parsed = smart_parse_line(part, price_dict_sell)
+                parsed = smart_parse_line(part, price_dict_sell, promo_info)
                 if parsed: new_cost_items.append(parsed)
             else:
-                parsed = smart_parse_line(part, price_dict_buy)
+                parsed = smart_parse_line(part, price_dict_buy, promo_info)
                 if parsed: new_payout_items.append(parsed)
                 
     return new_payout_items, new_cost_items
@@ -268,20 +266,26 @@ def clear_state():
 
 def main():
     set_theme()
-    st.title("⚖️ Cyber Trader Economy Suite")
     
-    # --- LOAD SAVED PROMO DATA ---
-    promo_data = load_promo()
+    # --- SIDEBAR MAP SELECTOR ---
+    st.sidebar.title("🌍 Map Selector")
+    selected_map = st.sidebar.selectbox("Select Server Map:", list(MAPS.keys()))
     
-    # Sidebar
-    st.sidebar.header("🔥 Item of the Week")
-    global special_name, special_price, special_item_active, expiry_date
+    st.title(f"⚖️ {selected_map} Economy Suite")
     
-    special_item_active = st.sidebar.checkbox("Enable Special Price", value=promo_data.get("active", False))
-    special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)", value=promo_data.get("name", ""))
-    special_price_val = st.sidebar.text_input("Special Price", value=str(promo_data.get("price", 0)))
+    # --- LOAD PROMO DATA (Per Map) ---
+    all_promos = load_all_promos()
+    # Get promo data SPECIFIC to this map, or default values
+    map_promo = all_promos.get(selected_map, {})
     
-    saved_date_str = promo_data.get("expiry", str(get_pst_today()))
+    st.sidebar.header(f"🔥 {selected_map} Item of Week")
+    
+    # Initialize inputs with this map's saved data
+    special_item_active = st.sidebar.checkbox("Enable Special Price", value=map_promo.get("active", False))
+    special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)", value=map_promo.get("name", ""))
+    special_price_val = st.sidebar.text_input("Special Price", value=str(map_promo.get("price", 0)))
+    
+    saved_date_str = map_promo.get("expiry", str(get_pst_today()))
     try: default_date = date.fromisoformat(saved_date_str)
     except: default_date = get_pst_today()
         
@@ -301,12 +305,27 @@ def main():
         """, unsafe_allow_html=True)
     
     if st.sidebar.button("🔄 Update Promo"):
-        new_data = {"active": special_item_active, "name": special_name, "price": special_price, "expiry": str(expiry_date)}
-        save_promo(new_data)
-        st.success("Saved!")
+        # Update ONLY this map's data in the master dictionary
+        all_promos[selected_map] = {
+            "active": special_item_active,
+            "name": special_name,
+            "price": special_price,
+            "expiry": str(expiry_date)
+        }
+        save_all_promos(all_promos)
+        st.success(f"Promo for {selected_map} Saved!")
         st.rerun()
 
-    data = load_prices()
+    # Pack promo info to pass to parser
+    promo_info_package = {
+        "active": special_item_active,
+        "name": special_name,
+        "price": special_price,
+        "expiry_date": expiry_date
+    }
+
+    # --- LOAD MAP PRICES ---
+    data = load_prices(selected_map)
     WE_BUY = data.get("WE_BUY", {})
     WE_SELL = data.get("TRADER_SELLS", {})
 
@@ -314,25 +333,25 @@ def main():
     if 'sell_df' not in st.session_state: st.session_state.sell_df = pd.DataFrame()
 
     st.markdown("### 📜 Smart Trade Processor")
-    st.markdown("Paste your **entire ticket** here. The AI will sort buys vs sells automatically.")
+    st.markdown(f"Paste your **{selected_map} ticket** here. The AI will sort buys vs sells automatically.")
     
     input_text = st.text_area("Paste Chat Log / Ticket:", height=200, key="master_input")
     
     if st.button("🚀 Process Ticket"):
-        payouts, costs = process_text_block(input_text, WE_BUY, WE_SELL)
+        payouts, costs = process_text_block(input_text, WE_BUY, WE_SELL, promo_info_package)
         st.session_state.buy_df = pd.DataFrame(payouts) if payouts else pd.DataFrame()
         st.session_state.sell_df = pd.DataFrame(costs) if costs else pd.DataFrame()
 
     render_result_tables()
     
     with st.expander("🕵️ Debug: Search Price Database"):
-        st.write("Check if an item exists in your loaded price list:")
+        st.write(f"Searching database for: **{selected_map}**")
         search_q = st.text_input("Search Item Name")
         if search_q:
             hits_buy = [k for k in WE_BUY.keys() if search_q.lower() in str(k).lower()]
             hits_sell = [k for k in WE_SELL.keys() if search_q.lower() in str(k).lower()]
             if hits_buy: st.write(f"**Found in WE BUY:** {hits_buy}")
-            if hits_sell: st.write(f"**Found in WE SELL:** {hits_sell}")
+            if hits_sell: st.write(f"**Found in TRADER SELLS:** {hits_sell}")
             if not hits_buy and not hits_sell: st.warning("Not found in either list.")
 
     st.button("🗑️ Clear All", on_click=clear_state)
