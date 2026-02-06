@@ -46,6 +46,7 @@ ALIASES = {
     "electronic repair kit": "Electronic Repair Kit",
 
     # --- MAGNIFYING SCOPES ($5,000) ---
+    "4x32  scopes": "All magnifying scopes",
     "4x32 scopes": "All magnifying scopes",
     "4x32 scope": "All magnifying scopes",
     "4x32": "All magnifying scopes",
