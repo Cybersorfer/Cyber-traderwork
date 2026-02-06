@@ -29,6 +29,7 @@ def get_pst_today():
 # --- ALIAS LIST ---
 # Maps user inputs (lowercase) to the EXACT name in your JSON
 ALIASES = {
+    # Weapons & Ammo
     "lar": "LAR",
     "lars": "LAR",       
     "m16": "M16-A2",     
@@ -43,6 +44,51 @@ ALIASES = {
     "bolts": "Bolts (stack of 5)",
     "9v": "9V Battery",
     "electronic repair kit": "Electronic Repair Kit",
+
+    # --- MAGNIFYING SCOPES ($5,000) ---
+    "4x32 scopes": "All magnifying scopes",
+    "4x32 scope": "All magnifying scopes",
+    "4x32": "All magnifying scopes",
+    "hunting scope": "All magnifying scopes",
+    "hunting scope(4x-12x)": "All magnifying scopes",
+    "marksman scope": "All magnifying scopes",
+    "marksman scope(3x-9x)": "All magnifying scopes",
+    "pso-1 scope": "All magnifying scopes",
+    "pso-1": "All magnifying scopes",
+    "pso-1-1 scope": "All magnifying scopes",
+    "pso-1-1": "All magnifying scopes",
+    "pso-6 scope": "All magnifying scopes",
+    "pso-6": "All magnifying scopes",
+    "atog 6x48 scope": "All magnifying scopes",
+    "atog 6x48": "All magnifying scopes",
+    "atog 4x32 scope": "All magnifying scopes",
+    "atog 4x32": "All magnifying scopes",
+    "pu scope": "All magnifying scopes",
+    "pu": "All magnifying scopes",
+    "c-1 scope": "All magnifying scopes",
+    "c-1": "All magnifying scopes",
+    "pistol scope": "All magnifying scopes",
+    "1pn51 scope": "All magnifying scopes",
+    "1pn51": "All magnifying scopes",
+    "kazuar": "All magnifying scopes",
+    "starlight": "All magnifying scopes",
+
+    # --- NON-MAGNIFYING SCOPES ($3,000) ---
+    "rvn": "All non-magnifying scopes",
+    "rvn sight": "All non-magnifying scopes",
+    "kobra": "All non-magnifying scopes",
+    "kobra sight": "All non-magnifying scopes",
+    "m68": "All non-magnifying scopes",
+    "comp m4": "All non-magnifying scopes",
+    "baraka": "All non-magnifying scopes",
+    "baraka sights": "All non-magnifying scopes",
+    "reflex": "All non-magnifying scopes",
+    "reflex sight": "All non-magnifying scopes",
+    "okp-7": "All non-magnifying scopes",
+    "okp": "All non-magnifying scopes",
+    "red dot": "All non-magnifying scopes",
+    "collimator": "All non-magnifying scopes",
+    
     # Tents & Storage
     "large tents": "Large Tent",
     "large tent": "Large Tent",
@@ -55,6 +101,7 @@ ALIASES = {
     "green barrel": "Barrel",
     "red barrel": "Barrel",
     "yellow barrel": "Barrel",
+    
     # Construction
     "construction lights": "Construction Light",
     "cable reels": "Cable Reel",
@@ -209,13 +256,11 @@ def smart_parse_line(line, price_dict, promo_info):
     exact_map = {str(k).lower(): str(k) for k in price_dict if k}
     
     # 2. EXACT MATCH (Try 1: As Is)
-    # Allows "Bolts (Stack of 5)" to match if it exists
     if item_clean.lower() in exact_map:
         real_key = exact_map[item_clean.lower()]
         return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key]}
 
     # 3. VARIANT STRIP MATCH (Try 2: Remove Colors)
-    # Converts "Plate Carrier (Black)" -> "Plate Carrier"
     item_no_variant = strip_variants(item_clean)
     if item_no_variant in exact_map:
         real_key = exact_map[item_no_variant]
@@ -229,7 +274,6 @@ def smart_parse_line(line, price_dict, promo_info):
     match, score = process.extractOne(item_no_variant, choices)
     
     if score < 85: return None
-    # Short word guard
     if len(item_no_variant) <= 4 and item_no_variant not in match.lower(): return None 
     
     return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match]}
