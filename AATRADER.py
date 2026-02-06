@@ -26,15 +26,20 @@ def get_pst_now():
 def get_pst_today():
     return get_pst_now().date()
 
-# --- ALIAS LIST (Shared across all maps) ---
+# --- ALIAS LIST (The Translator) ---
+# Maps user inputs (lowercase) to the EXACT name in your JSON
 ALIASES = {
-    "lar": "LAR",       
-    "m16": "M16",       
+    "lar": "LAR",
+    "lars": "LAR",        # Fixes plural "3 lars"
+    "m16": "M16-A2",      # Updated to match typical DB keys
     "m4": "M4-A1",      
     "ak": "KA-74",      
     "vs": "VSS",
+    "vs89": "VS-89",      # Fixes "vs89" typo
     "weed": "cannabis seeds",
     "seeds": "cannabis seeds",
+    "cannabis seed": "cannabis seeds",
+    # Tents & Storage
     "large tents": "Large Tent",
     "large tent": "Large Tent",
     "medium tent": "Medium Tent",
@@ -45,14 +50,23 @@ ALIASES = {
     "blue barrel": "Barrel",
     "green barrel": "Barrel",
     "red barrel": "Barrel",
-    "yellow barrel": "Barrel"
+    "yellow barrel": "Barrel",
+    # Construction & Tools
+    "construction lights": "Construction Light",
+    "cable reels": "Cable Reel",
+    "generator": "Generator",
+    "battery charger": "Battery Charger", 
+    "santa hats": "Santa Hat",
+    "santa beard": "Santa Beard"
 }
 
 # --- JUNK WORD REMOVER ---
+# Words to strip out so the fuzzy matcher sees clearly
 FILLERS = [
     "pack of", "packs of", "box of", "can of",
     "cr550", "item of the week", "for the",
-    "stored in", "inside", "would like to"
+    "stored in", "inside", "would like to",
+    "hi i'd like to", "please", "thank you", "thanks"
 ]
 
 # --- CUSTOM CSS ---
@@ -82,7 +96,6 @@ def set_theme():
             background-color: #1E1E1E !important;
             border-color: #4CAF50 !important;
         }
-        /* DROPDOWN MENU FIX */
         div[data-baseweb="select"] > div {
             background-color: #1E1E1E !important;
             color: #00FF00 !important;
@@ -106,7 +119,6 @@ def set_theme():
 
 # --- SAVE/LOAD FUNCTIONS ---
 def load_prices(map_name):
-    # Loads the specific JSON file for the selected map
     file_path = MAPS.get(map_name, "prices_chernarus.json")
     try:
         with open(file_path, 'r') as f:
@@ -115,7 +127,6 @@ def load_prices(map_name):
         return {"WE_BUY": {}, "TRADER_SELLS": {}}
 
 def load_all_promos():
-    # Loads the master promo file containing data for ALL maps
     if os.path.exists(PROMO_FILE):
         try:
             with open(PROMO_FILE, 'r') as f:
@@ -159,8 +170,7 @@ def smart_parse_line(line, price_dict, promo_info):
     else:
         is_aliased = False
 
-    # --- SPECIAL ITEM LOGIC (Map Specific) ---
-    # Unpack the promo info passed from the main function
+    # --- PROMO ITEM LOGIC ---
     s_active = promo_info.get("active", False)
     s_name = promo_info.get("name", "")
     s_price = promo_info.get("price", 0)
@@ -170,6 +180,7 @@ def smart_parse_line(line, price_dict, promo_info):
         if s_active and get_pst_today() <= s_expiry:
              return {"Item": f"🔥 {s_name}", "Qty": quantity, "Unit Price": s_price, "Total": quantity * s_price}
 
+    # --- EXACT MATCH ---
     exact_map = {str(k).lower(): str(k) for k in price_dict if k}
     search_term = item_clean.lower()
     
@@ -180,11 +191,13 @@ def smart_parse_line(line, price_dict, promo_info):
     if is_aliased:
         return {"Item": f"❌ MISSING: {item_clean}", "Qty": quantity, "Unit Price": 0, "Total": 0}
 
+    # --- FUZZY MATCH ---
     choices = [str(k) for k in price_dict.keys() if k]
     if not choices: return None
     
     match, score = process.extractOne(item_clean, choices)
     
+    # Tuned thresholds
     if score < 85: return None
     if len(item_clean) <= 4 and item_clean.lower() not in match.lower(): return None 
     if score < 95 and len(item_clean) > len(match) + 6: return None
@@ -193,12 +206,23 @@ def smart_parse_line(line, price_dict, promo_info):
 
 def check_mode_switch(line):
     line_lower = line.lower()
-    buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need", "would like to buy", "would like to order"]
+    
+    # EXPANDED BUY LIST - Covers "Hi I'd like to buy", "looking to buy", etc.
+    buy_keywords = [
+        "want to buy", "buying", "wtb", "want to order", "ordering", "need", 
+        "would like to buy", "would like to order", "like to buy", "looking to buy"
+    ]
     for kw in buy_keywords:
         if kw in line_lower: return "COST", kw
-    sell_keywords = ["want to sell", "selling", "wts", "i have", "have", "would like to sell"]
+        
+    # EXPANDED SELL LIST
+    sell_keywords = [
+        "want to sell", "selling", "wts", "i have", "have", "would like to sell",
+        "like to sell", "looking to sell"
+    ]
     for kw in sell_keywords:
         if kw in line_lower: return "PAYOUT", kw
+        
     return None, None
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
@@ -210,19 +234,23 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
         
+        # 1. Check for Mode Switch (Conversational detection)
         new_mode, keyword = check_mode_switch(raw_line)
         if new_mode:
             current_mode = new_mode
+            # Remove the trigger keyword so it doesn't pollute the first item
             line_content = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
         else:
             line_content = raw_line
 
+        # 2. Split by commas
         comma_parts = line_content.split(',')
         
         for part in comma_parts:
             part = part.strip()
             if not part: continue
             
+            # 3. Process based on Sticky Mode
             if current_mode == "COST":
                 parsed = smart_parse_line(part, price_dict_sell, promo_info)
                 if parsed: new_cost_items.append(parsed)
@@ -270,17 +298,14 @@ def main():
     # --- SIDEBAR MAP SELECTOR ---
     st.sidebar.title("🌍 Map Selector")
     selected_map = st.sidebar.selectbox("Select Server Map:", list(MAPS.keys()))
-    
     st.title(f"⚖️ {selected_map} Economy Suite")
     
-    # --- LOAD PROMO DATA (Per Map) ---
+    # --- LOAD PROMO DATA ---
     all_promos = load_all_promos()
-    # Get promo data SPECIFIC to this map, or default values
     map_promo = all_promos.get(selected_map, {})
     
     st.sidebar.header(f"🔥 {selected_map} Item of Week")
     
-    # Initialize inputs with this map's saved data
     special_item_active = st.sidebar.checkbox("Enable Special Price", value=map_promo.get("active", False))
     special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)", value=map_promo.get("name", ""))
     special_price_val = st.sidebar.text_input("Special Price", value=str(map_promo.get("price", 0)))
@@ -305,7 +330,6 @@ def main():
         """, unsafe_allow_html=True)
     
     if st.sidebar.button("🔄 Update Promo"):
-        # Update ONLY this map's data in the master dictionary
         all_promos[selected_map] = {
             "active": special_item_active,
             "name": special_name,
@@ -316,7 +340,6 @@ def main():
         st.success(f"Promo for {selected_map} Saved!")
         st.rerun()
 
-    # Pack promo info to pass to parser
     promo_info_package = {
         "active": special_item_active,
         "name": special_name,
@@ -324,7 +347,7 @@ def main():
         "expiry_date": expiry_date
     }
 
-    # --- LOAD MAP PRICES ---
+    # --- LOAD PRICES ---
     data = load_prices(selected_map)
     WE_BUY = data.get("WE_BUY", {})
     WE_SELL = data.get("TRADER_SELLS", {})
