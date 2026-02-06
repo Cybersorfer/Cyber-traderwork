@@ -18,6 +18,23 @@ MAPS = {
 }
 PROMO_FILE = 'promo.json'
 
+# --- GENERIC CATEGORIES (Fallback Prices) ---
+GENERIC_PRICES = {
+    "Select Category...": 0,
+    "All Other Bags/sacks ($3,000)": 3000,
+    "All Other Shoes ($1,000)": 1000,
+    "All Other Boots ($2,000)": 2000,
+    "All Other Hats and masks ($1,000)": 1000,
+    "All other pants ($2,000)": 2000,
+    "All other tops ($3,000)": 3000,
+    "All Melee Weapons ($4,000)": 4000,
+    "Buttstock/Handguard/Bayonets ($2,000)": 2000,
+    "All other unlisted mags ($3,000)": 3000,
+    "All non-magnifying scopes ($3,000)": 3000,
+    "All other unlisted guns ($12,000)": 12000,
+    "All Other Seed Packs ($1,000)": 1000
+}
+
 # --- TIMEZONE CONFIG (PST LOCK) ---
 def get_pst_now():
     pst = pytz.timezone('US/Pacific')
@@ -170,12 +187,14 @@ def set_theme():
         [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #4CAF50 !important; }
         
         /* Missing Item Box */
-        .missing-box {
+        .missing-row {
             background-color: #331111;
-            border: 1px solid #FF4444;
             padding: 10px;
             border-radius: 5px;
-            margin-bottom: 20px;
+            margin-bottom: 5px;
+            border-left: 5px solid #FF4444;
+            display: flex;
+            align-items: center;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -238,7 +257,6 @@ def smart_parse_line(line, price_dict, promo_info):
         item_clean = ALIASES[item_clean.lower()]
 
     # --- MATCHING LOGIC ---
-    # Return FOUND=True if match, FOUND=False if not
     
     # 1. PROMO MATCH
     s_active = promo_info.get("active", False)
@@ -319,36 +337,72 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             part = part.strip()
             if not part: continue
             
+            # Identify which DB to check
             if current_mode == "COST":
-                parsed = smart_parse_line(part, price_dict_sell, promo_info)
-                if parsed:
-                    if parsed["Found"]:
+                db = price_dict_sell
+            else:
+                db = price_dict_buy
+
+            parsed = smart_parse_line(part, db, promo_info)
+            if parsed:
+                # Add the "Type" (COST vs PAYOUT) so we know where to assign funds later
+                parsed["Type"] = current_mode
+                
+                if parsed["Found"]:
+                    if current_mode == "COST":
                         new_cost_items.append(parsed)
                     else:
-                        new_missing_items.append(parsed)
-            else:
-                parsed = smart_parse_line(part, price_dict_buy, promo_info)
-                if parsed:
-                    if parsed["Found"]:
                         new_payout_items.append(parsed)
-                    else:
-                        new_missing_items.append(parsed)
+                else:
+                    new_missing_items.append(parsed)
                 
     return new_payout_items, new_cost_items, new_missing_items
 
 def render_result_tables():
-    # --- MISSING ITEMS SECTION ---
+    # --- CALCULATE MANUAL RESOLUTIONS ---
+    resolved_payout = 0
+    resolved_cost = 0
+
     if 'missing_df' in st.session_state and not st.session_state.missing_df.empty:
-        st.warning("⚠️ **Items Not Found / No Price:**")
-        st.markdown("The following items could not be found in the database. Please check spelling or add them to your JSON file.")
+        st.warning("⚠️ **Items Not Found - Manual Resolution Needed:**")
+        st.markdown("Select a category for each missing item to add it to the total.")
         
         m_df = st.session_state.missing_df
-        # Display simple table for missing items
-        st.table(m_df[["Item", "Qty"]])
+        
+        # Iterate through missing items to create selectors
+        for index, row in m_df.iterrows():
+            c1, c2, c3 = st.columns([3, 1, 3])
+            with c1:
+                st.write(f"❌ **{row['Item']}** (x{row['Qty']})")
+            with c2:
+                st.caption(f"Type: {row['Type']}")
+            with c3:
+                # Unique key per row so they don't conflict
+                cat_key = f"cat_{index}_{row['Item']}"
+                selected_cat = st.selectbox(
+                    "Assign Category:", 
+                    options=GENERIC_PRICES.keys(), 
+                    key=cat_key,
+                    label_visibility="collapsed"
+                )
+                
+                # Math Logic
+                price = GENERIC_PRICES[selected_cat]
+                line_total = price * row['Qty']
+                
+                # Add to the correct running total
+                if line_total > 0:
+                    if row['Type'] == "PAYOUT":
+                        resolved_payout += line_total
+                    else:
+                        resolved_cost += line_total
+                    st.success(f"+ ${line_total:,}")
+        
         st.markdown("---")
 
     # --- PAYOUT SECTION ---
     st.subheader("💰 Payout (We Buy)")
+    payout_db_total = 0
     if 'buy_df' in st.session_state and not st.session_state.buy_df.empty:
         df = st.session_state.buy_df
         if "Item" in df.columns:
@@ -356,14 +410,22 @@ def render_result_tables():
             fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
             fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
             st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
-            st.success(f"### Total Payout: {df['Total'].sum():,}")
+            payout_db_total = df['Total'].sum()
     else:
-        st.info("No Payout items.")
+        st.info("No Payout items found in database.")
+
+    # FINAL PAYOUT MATH
+    final_payout = payout_db_total + resolved_payout
+    if resolved_payout > 0:
+        st.success(f"### Total: ${payout_db_total:,} (DB) + ${resolved_payout:,} (Resolved) = ${final_payout:,}")
+    else:
+        st.success(f"### Total Payout: ${final_payout:,}")
 
     st.markdown("---")
 
     # --- COST SECTION ---
     st.subheader("🛒 Cost (We Sell)")
+    cost_db_total = 0
     if 'sell_df' in st.session_state and not st.session_state.sell_df.empty:
         df = st.session_state.sell_df
         if "Item" in df.columns:
@@ -371,9 +433,16 @@ def render_result_tables():
             fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
             fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
             st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
-            st.error(f"### Total Due: {df['Total'].sum():,}")
+            cost_db_total = df['Total'].sum()
     else:
-        st.info("No Cost items.")
+        st.info("No Cost items found in database.")
+
+    # FINAL COST MATH
+    final_cost = cost_db_total + resolved_cost
+    if resolved_cost > 0:
+        st.error(f"### Total: ${cost_db_total:,} (DB) + ${resolved_cost:,} (Resolved) = ${final_cost:,}")
+    else:
+        st.error(f"### Total Due: ${final_cost:,}")
 
 def clear_state():
     st.session_state.buy_df = pd.DataFrame()
