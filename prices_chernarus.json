@@ -34,7 +34,7 @@
     "VIKHR": 28000, "CR-527": 10000, "SSG": 18000, "Savannah": 25000, "Tundra": 20000,
     "Vaiga": 28000, "R12": 18000, "Crossbow": 18000, "M79 Grenade Launcher": 25000,
     ".308 WIN Box": 4000, "7.62x54 Box": 2000, "5.56x45 Box": 2000, "Plate Carrier": 10000,
-    "Tactical Vest": 8000, "Hunter Vest": 8000, "Field Backpack": 10000, "Mountain Backpack": 9000,
+    "Tactical Vest": 8000, "Hunter Vest": 8000, "Field Bag": 10000, "Field Backpack": 10000, "Mountain Backpack": 9000,
     "Ghillie Suit": 10000, "Night Vision Goggles": 7000, "DMR 20rd Mag": 7000, "LAR 20rd Mag": 7000,
     "VSD 10rd Mag": 4000, "Standard 60rd Mag": 6000, "Leather Kit": 2000,
     "All Other Seed Packs": 1000,
@@ -148,6 +148,7 @@
     "Jerry Can, Full": 2000
   }
 }
+
 
 
 
