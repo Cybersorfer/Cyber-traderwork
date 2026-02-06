@@ -105,9 +105,15 @@
     "All Other Hats and masks": 1000,
     "Combat Gas Mask": 4000,
     "Gas Mask/Respirator/Filters": 2000,
-    "Gloves/Boots/Pants/Shirt/Hood (NBC)": 3000,
-    "All Gloves": 1000,
-    "Assault/Combat/Jungle Boots": 3000,
+    "Gloves NBC": 3000,
+    "Boots NBC": 3000,
+    "Pants NBC": 3000,
+    "Shirt NBC": 3000,
+    "Hood (NBC)": 3000,
+    "Gloves": 1000,
+    "Assault Boots": 3000,
+    "Combat Boots": 3000,
+    "Jungle Boots": 3000,
     "All Other Boots": 2000,
     "All Other Shoes": 1000,
     "Combat Backpack": 8000,
@@ -141,6 +147,7 @@
     "Jerry Can, Full": 2000
   }
 }
+
 
 
 
