@@ -19,8 +19,8 @@
     "Morphine": 1000, "Epipen": 1000, "POX Antidote": 4000, "First Aid Pouch": 1000, "IV Start Kit": 1000,
     "Multivitamin Bottle": 3000, "Disinfectant Spray": 2000, "Bandage": 2000, "Splint": 2000,
     "Iodine": 1000, "Alcohol": 1000, "Blood Test Kit": 2000, "Blood Collection Kit": 2000,
-    "IV Saline Bag": 2000, "Cannabis Seed Pack": 2000, "Garden Lime": 4000, "Shovel": 2000,
-    "Pickaxe": 2000, "Hammer": 2000, "Sledgehammer": 2000, "Splitting Axe": 2000, "Hatchet": 2000,
+    "IV Saline Bag": 2000, "Cannabis Seed Pack": 2000, "cannabis seeds pack": 2000, "weed seeds pack": 2000, "Garden Lime": 4000, "Shovel": 2000,
+    "Pickaxe": 2000, "Hammer": 2000, "Sledgehammer": 2000,  "Splitting Axe": 2000, "Hatchet": 2000,
     "Hacksaw": 2000, "Firefighter Axe": 3000, "Farming Hoe": 3000, "Handsaw": 3000, "Pliers": 1000,
     "Chainsaw": 5000, "Nail Box": 3000, "Metal Wire": 3000, "Cable Reel": 3000, "Construction Light": 3000,
     "Protective Case": 3000, "Car Battery": 3000, "Barb Wire": 4000, "Radiator": 4000, "4 Digit Lock": 5000,
@@ -123,4 +123,5 @@
     "Jerry Can, Full": 2000
   }
 }
+
 
