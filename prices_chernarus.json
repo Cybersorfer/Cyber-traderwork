@@ -82,7 +82,7 @@
     "Hunter Pants": 4000,
     "Cargo Pants": 4000,
     "Police Pants": 4000,
-    "All other pants": 2000,
+    "All other pants": 2000, "pants": 2000,
     "Pouches": 4000,
     "Holster": 2000,
     "Ballistic Vest": 4000,
@@ -114,8 +114,8 @@
     "Assault Boots": 3000,
     "Combat Boots": 3000,
     "Jungle Boots": 3000,
-    "All Other Boots": 2000,
-    "All Other Shoes": 1000,
+    "All Other Boots": 2000, "Boots": 2000,
+    "All Other Shoes": 1000, "Shoes": 1000,
     "Combat Backpack": 8000,
     "Tactical Backpack": 8000,
     "Hunter Backpack": 8000,
@@ -148,6 +148,7 @@
     "Jerry Can, Full": 2000
   }
 }
+
 
 
 
