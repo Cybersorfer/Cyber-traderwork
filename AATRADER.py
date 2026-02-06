@@ -63,14 +63,13 @@ def set_theme():
             caret-color: #00FF00;
         }
         
-        /* DATE INPUT FIX - FORCE DARK MODE */
+        /* DATE INPUT FIX */
         input[type="date"] {
             background-color: #1E1E1E !important;
             color: #00FF00 !important;
-            filter: invert(0) !important; /* Prevents white background forcing */
+            filter: invert(0) !important;
             border: 1px solid #4CAF50 !important;
         }
-        /* Target the Streamlit wrapper for the date picker */
         div[data-baseweb="input"] {
             background-color: #1E1E1E !important;
             border-color: #4CAF50 !important;
@@ -145,7 +144,7 @@ def smart_parse_line(line, price_dict):
     else:
         is_aliased = False
 
-    # --- SPECIAL ITEM LOGIC (PST CHECK) ---
+    # --- SPECIAL ITEM LOGIC ---
     if ('special_name' in globals() and special_name and 
         special_name.lower() in item_clean.lower()):
         
@@ -274,9 +273,17 @@ def main():
     except: special_price = 0
 
     # --- CLOCK & SAVE BUTTON ---
-    # Display current PST time for admin reference
-    pst_time_str = get_pst_now().strftime("%I:%M %p PST")
-    st.sidebar.markdown(f"**🕒 Server Time:** `{pst_time_str}`")
+    # Display current PST time cleanly
+    pst_time_str = get_pst_now().strftime("%I:%M %p")
+    
+    # Custom HTML for readable time display
+    st.sidebar.markdown(f"""
+        <div style="margin-bottom: 10px; margin-top: 10px;">
+            <b style="color: #B0B0B0; font-size: 1rem;">🕒 Server Time(PST):</b> 
+            <br>
+            <span style="color: #00FF00; font-size: 1.2rem; font-weight: bold;">{pst_time_str}</span>
+        </div>
+        """, unsafe_allow_html=True)
     
     if st.sidebar.button("🔄 Update Promo"):
         new_data = {
