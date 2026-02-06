@@ -4,7 +4,7 @@ import json
 import os
 import pandas as pd
 import pytz 
-from datetime import datetime, date # Updated imports for Timezone handling
+from datetime import datetime, date
 from thefuzz import process
 
 # --- PAGE CONFIG ---
@@ -15,10 +15,14 @@ PRICES_FILE = 'prices.json'
 PROMO_FILE = 'promo.json'
 
 # --- TIMEZONE CONFIG (PST LOCK) ---
-def get_pst_today():
-    # Forces the app to see "Today" as Pacific Time, regardless of server location
+def get_pst_now():
+    # Returns the full datetime object for PST
     pst = pytz.timezone('US/Pacific')
-    return datetime.now(pst).date()
+    return datetime.now(pst)
+
+def get_pst_today():
+    # Returns just the date part
+    return get_pst_now().date()
 
 # --- ALIAS LIST ---
 ALIASES = {
@@ -45,19 +49,40 @@ def set_theme():
         .stApp { background-color: #0E1117; color: #E0E0E0; }
         section[data-testid="stSidebar"] { background-color: #262730; }
         section[data-testid="stSidebar"] * { color: #FAFAFA !important; }
+        
+        /* INPUT LABEL COLOR */
         .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label {
             color: #B0B0B0 !important; font-size: 1rem; font-weight: bold;
         }
-        .stTextArea textarea, .stTextInput input {
-            background-color: #1E1E1E !important; color: #00FF00 !important;
-            border: 1px solid #4CAF50; caret-color: #00FF00;
+        
+        /* STANDARD INPUT BOXES */
+        .stTextArea textarea, .stTextInput input, .stNumberInput input {
+            background-color: #1E1E1E !important; 
+            color: #00FF00 !important;
+            border: 1px solid #4CAF50; 
+            caret-color: #00FF00;
         }
+        
+        /* DATE INPUT FIX - FORCE DARK MODE */
+        input[type="date"] {
+            background-color: #1E1E1E !important;
+            color: #00FF00 !important;
+            filter: invert(0) !important; /* Prevents white background forcing */
+            border: 1px solid #4CAF50 !important;
+        }
+        /* Target the Streamlit wrapper for the date picker */
+        div[data-baseweb="input"] {
+            background-color: #1E1E1E !important;
+            border-color: #4CAF50 !important;
+        }
+        
         .stButton>button {
             color: #FAFAFA; background-color: #262730; border: 1px solid #4CAF50; transition: all 0.3s ease;
         }
         .stButton>button:hover {
             background-color: #4CAF50; color: #000000; box-shadow: 0 0 10px #4CAF50;
         }
+        
         table { color: #E0E0E0 !important; background-color: transparent !important; border-collapse: collapse; width: 100%; }
         thead tr th { background-color: #262730 !important; color: #00FF00 !important; border-bottom: 2px solid #4CAF50 !important; }
         tbody tr { border-bottom: 1px solid #333 !important; }
@@ -127,7 +152,6 @@ def smart_parse_line(line, price_dict):
         is_active = globals().get('special_item_active', False)
         exp_date = globals().get('expiry_date', get_pst_today())
         
-        # Compare against PST Today
         if is_active and get_pst_today() <= exp_date:
              return {"Item": f"🔥 {special_name}", "Qty": quantity, "Unit Price": special_price, "Total": quantity * special_price}
 
@@ -231,13 +255,13 @@ def main():
     
     # Sidebar
     st.sidebar.header("🔥 Item of the Week")
+    
     global special_name, special_price, special_item_active, expiry_date
     
     special_item_active = st.sidebar.checkbox("Enable Special Price", value=promo_data.get("active", False))
     special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)", value=promo_data.get("name", ""))
     special_price_val = st.sidebar.text_input("Special Price", value=str(promo_data.get("price", 0)))
     
-    # LOAD DATE & FORCE PST CHECK
     saved_date_str = promo_data.get("expiry", str(get_pst_today()))
     try:
         default_date = date.fromisoformat(saved_date_str)
@@ -249,6 +273,11 @@ def main():
     try: special_price = int(special_price_val)
     except: special_price = 0
 
+    # --- CLOCK & SAVE BUTTON ---
+    # Display current PST time for admin reference
+    pst_time_str = get_pst_now().strftime("%I:%M %p PST")
+    st.sidebar.markdown(f"**🕒 Server Time:** `{pst_time_str}`")
+    
     if st.sidebar.button("🔄 Update Promo"):
         new_data = {
             "active": special_item_active,
@@ -257,7 +286,7 @@ def main():
             "expiry": str(expiry_date)
         }
         save_promo(new_data)
-        st.success("Promo Saved!")
+        st.success("Saved!")
         st.rerun()
 
     data = load_prices()
