@@ -23,7 +23,7 @@
     "Pickaxe": 2000, "Hammer": 2000, "Sledgehammer": 2000,  "Splitting Axe": 2000, "Hatchet": 2000,
     "Hacksaw": 2000, "Firefighter Axe": 3000, "Farming Hoe": 3000, "Handsaw": 3000, "Pliers": 1000,
     "Chainsaw": 5000, "Nail Box": 3000, "Metal Wire": 3000, "Cable Reel": 3000, "Construction Light": 3000,
-    "Protective Case": 3000, "Car Battery": 3000, "Barb Wire": 4000, "Radiator": 4000, "4 Digit Lock": 5000,
+    "Protective Case": 3000, "Car Battery": 3000, "Barb Wire": 4000, "Barbed Wire": 4000, "Radiator": 4000, "4 Digit Lock": 5000, "4-Dial Lock": 5000,"4 Dial Lock": 5000,"4Dial Lock": 5000,
     "Camo Net": 5000, "Generator": 7000, "Metal Sheet (10)": 10000, "Planks (10)": 5000,
     "Stones (32)": 20000, "White Flag": 0, "Faction Flag": 0, "Barrel": 35000, "Seachest": 20000,
     "Canopy Tent": 30000, "Medium Tent": 40000, "Large Tent": 50000, "Ammo Box": 5000,
@@ -148,6 +148,7 @@
     "Jerry Can, Full": 2000
   }
 }
+
 
 
 
