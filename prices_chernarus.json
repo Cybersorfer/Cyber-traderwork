@@ -6,7 +6,7 @@
     "VSD": 6000, "VSS": 3000, "Bibles": 4000, "Egg": 2000, "Eggs": 2000,  "Yellow Scarred Moto Helmet": 10000,
     "Alarm Clock": 1000, "Kitchen Timer": 1000, "Pen": 2000, "Santa Beard": 1000, "Santa Hat": 1000,
     "Unknown Food Can": 1000, "Zagorky Snacks": 2000, "10th Anniversary Tshirt": 2000, "10th Anniversary T-shirt": 2000, "10th Anniversary shirt": 2000,
-    "Thermometer": 2000, "Cigarettes": 3000, "Packs of Smokes": 3000, "Punch Card": 5000
+    "Thermometer": 2000, "Cigarettes": 3000, "Packs of Smokes": 3000, "Smokes": 3000, "Punch Card": 5000
   },
   "TRADER_SELLS": {
     "Leather Sewing Kit": 2000, "Sewing Kit": 2000, "Duct Tape": 2000, "Sharpening Stone": 2000,
@@ -148,6 +148,7 @@
     "Jerry Can, Full": 2000
   }
 }
+
 
 
 
