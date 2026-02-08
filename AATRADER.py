@@ -43,7 +43,7 @@ def get_pst_now():
 def get_pst_today():
     return get_pst_now().date()
 
-# --- ALIAS LIST (UPDATED FROM SCREENSHOTS) ---
+# --- ALIAS LIST ---
 ALIASES = {
     # Typos & Short Names
     "prn": "Pen", 
@@ -54,7 +54,7 @@ ALIASES = {
     "sharpening stones": "Whetstone",
     "anniversary tshirt": "10th Anniversary Tshirt",
     "anniversary t-shirt": "10th Anniversary Tshirt",
-    "item of the week stove": "Gas Stove", # Assuming 'Gas Stove' is the promo item, adjust if needed
+    "item of the week stove": "Gas Stove", 
     
     # Ammo / Guns Shortnames
     "lar": "LAR",
@@ -74,16 +74,19 @@ ALIASES = {
     "seachests": "Seachest",
     "sea chest": "Seachest",
     
-    # Caliber Mapping (Critical for 5.56 etc)
+    # Caliber Mapping 
+    # NOTE: "7.62x54" is usually in the DB, but "5.56" often isn't.
     "5.56": "5.56x45 Ammo Box",
     "5.45": "5.45x39 Ammo Box",
     "7.62x39": "7.62x39 Ammo Box",
     "7.62x54": "7.62x54 Ammo Box",
+    "7.62x54r": "7.62x54 Ammo Box", # Handle 'r' variant
     "308": ".308 WIN Ammo Box",
     ".308": ".308 WIN Ammo Box",
     ".357": ".357 Ammo Box",
     "12g": "12ga Ammo Box",
     "12ga": "12ga Ammo Box",
+    "9x39": "9x39 Ammo Box",
 
     # --- SCOPES ---
     "4x32 scopes": "All magnifying scopes",
@@ -187,17 +190,13 @@ def load_all_promos():
 def save_all_promos(data):
     with open(PROMO_FILE, 'w') as f: json.dump(data, f)
 
-# --- NEW SMART PARSING LOGIC ---
+# --- SMART PARSING LOGIC ---
 
 def simple_pluralize(word):
-    """Simple logic to generate basic plurals for the index."""
     word = word.lower().strip()
-    if word.endswith('s'):
-        return word 
-    if word.endswith('y'):
-        return word[:-1] + "ies" 
-    if word.endswith('x') or word.endswith('ch') or word.endswith('sh'):
-        return word + "es"
+    if word.endswith('s'): return word 
+    if word.endswith('y'): return word[:-1] + "ies" 
+    if word.endswith('x') or word.endswith('ch') or word.endswith('sh'): return word + "es"
     return word + "s"
 
 @st.cache_data
@@ -219,7 +218,7 @@ def build_search_index(price_dict, aliases):
         # Add plural version
         index[simple_pluralize(clean_name)] = real_name
         
-        # Add version without parentheses (e.g., "burlap strips (2)" -> "burlap strips")
+        # Add version without parentheses
         no_variant = re.sub(r'\(.*?\)', '', clean_name).strip()
         if no_variant:
             index[no_variant] = real_name
@@ -227,24 +226,15 @@ def build_search_index(price_dict, aliases):
 
     return index
 
-def pre_clean_text(text):
-    """
-    Separates stuck multipliers like '10x' -> '10 x' and 'x5' -> 'x 5'
-    so regex can find words cleanly.
-    """
-    text = text.lower()
-    # Replace '10x' with '10 x'
-    text = re.sub(r'(\d)[xX]', r'\1 x ', text)
-    # Replace 'x10' with 'x 10'
-    text = re.sub(r'[xX](\d)', r' x \1', text)
-    return text
-
 def extract_from_chunk(text, search_index):
     """
-    PRIORITY: Find Item FIRST, remove it from string, THEN find quantity in remainder.
-    Uses precise Lookaround Regex to handle dots in calibers (.357, 5.56)
+    PRIORITY: Find Item FIRST based on Length.
+    Boundary logic allows 'x' neighbors to support '10x5.56' or '7.62x54'.
     """
-    # 1. Sort keys by length (descending) to match specific items first
+    text_lower = text.lower()
+    
+    # 1. Sort keys by length (descending). 
+    # This ensures "7.62x54" (len 7) is checked before "7.62" (len 4).
     sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
     
     found_item_key = None
@@ -254,15 +244,14 @@ def extract_from_chunk(text, search_index):
     for key in sorted_keys:
         esc_key = re.escape(key)
         
-        # STRICT BOUNDARY LOGIC using Lookarounds:
-        # (?<!\w) -> Lookbehind: Ensure previous char is NOT a word char
-        # (?!\w)  -> Lookahead: Ensure next char is NOT a word char
-        # This allows ".357" to match because "." is not \w
-        # This allows "5.56" to match because "6" is followed by space/end
+        # LOOKAROUND REGEX:
+        # (?<![a-wy-zA-WY-Z]) -> Not preceded by a letter (EXCEPT x, X)
+        # (?![a-wy-zA-WY-Z])  -> Not followed by a letter (EXCEPT x, X)
+        # This allows 'x' to touch the item (for multipliers), but blocks 'Apple' in 'Pineapple'.
         
-        pattern = r'(?<!\w)' + esc_key + r'(?!\w)'
+        pattern = r'(?<![a-wy-zA-WY-Z])' + esc_key + r'(?![a-wy-zA-WY-Z])'
         
-        if re.search(pattern, text):
+        if re.search(pattern, text_lower):
             found_item_key = key
             real_name_result = search_index[key]
             break
@@ -270,12 +259,11 @@ def extract_from_chunk(text, search_index):
     if found_item_key:
         # 3. REMOVE ITEM FROM TEXT TO ISOLATE QUANTITY
         # Use same pattern to remove exactly what we found
-        pattern = r'(?<!\w)' + re.escape(found_item_key) + r'(?!\w)'
-        text_without_item = re.sub(pattern, " ", text, count=1)
+        pattern = r'(?<![a-wy-zA-WY-Z])' + re.escape(found_item_key) + r'(?![a-wy-zA-WY-Z])'
+        text_without_item = re.sub(pattern, " ", text_lower, count=1)
         
         # 4. FIND QUANTITY IN REMAINDER
-        # Look for "x 5", "5 x", or just "5"
-        # Since we pre-cleaned, 'x' should be separated
+        # Look for "x 5", "5 x", "10x", "x5", or just "5"
         qty_match = re.search(r'[xX]\s*(\d+)|(\d+)\s*[xX]|(\d+)', text_without_item)
         
         if qty_match:
@@ -288,7 +276,7 @@ def extract_from_chunk(text, search_index):
         return real_name_result, quantity, True
         
     else:
-        # Fallback: Just look for a number if no item found
+        # Fallback: Just look for a number
         qty_match = re.search(r'(\d+)', text)
         quantity = int(qty_match.group(1)) if qty_match else 1
         return text, quantity, False
@@ -338,9 +326,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
         else:
             line_content = raw_line
 
-        # Pre-clean input (separate 10x to 10 x)
-        line_content = pre_clean_text(line_content)
-        
         # Split by comma
         comma_parts = line_content.split(',')
         
@@ -355,7 +340,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             price = 0
             if found:
                 # Check Promo
-                # Simple loose match for promo name
                 if promo_info.get("active") and promo_info.get("name").lower() in item_name.lower():
                      price = promo_info.get("price")
                      item_name = f"🔥 {promo_info.get('name')}"
