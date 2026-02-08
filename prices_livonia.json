@@ -42,7 +42,7 @@
     "Zagorky": 2000,
     "10th Anniversary Tshirt": 3000,  "10th Anniversary T-shirt": 3000, "10th Anniversary shirt": 3000,
     "Thermometer": 2000,
-    "Cigarettes": 4000, "Packs of Smokes": 4000, "Smokes": 4000
+    "Cigarettes": 4000, "Packs of Smokes": 4000, "Smokes": 4000, "cigarette pack": 4000 
   },
   "TRADER_SELLS": {
     "Leather Kit": 5000,
