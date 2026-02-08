@@ -114,7 +114,7 @@
     "Generator": 10000,
     "Construction Light": 5000,
     "Xmas Light": 3000,
-    "Metal Sheet (stack of 10)": 10000,
+    "Metal Sheet (stack of 10)": 10000, "stacks of sheet metal": 10000,
     "Planks (stack of 10)": 5000,
     "Stones (32)": 20000,
     "Flag (Base Building)": 0,
