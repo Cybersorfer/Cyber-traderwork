@@ -44,7 +44,13 @@ def get_pst_today():
     return get_pst_now().date()
 
 # --- ALIAS LIST ---
+# We map "Item of the week" to a specific PLACEHOLDER so we can swap it dynamically later.
 ALIASES = {
+    # SPECIAL PROMO MAPPING
+    "item of the week": "🔥🔥PROMO_ITEM🔥🔥", 
+    "item of week": "🔥🔥PROMO_ITEM🔥🔥",
+    "promo item": "🔥🔥PROMO_ITEM🔥🔥",
+
     # Typos & Short Names
     "prn": "Pen", 
     "ptn": "Pen",
@@ -56,8 +62,6 @@ ALIASES = {
     "anniversary tshirt": "10th Anniversary Tshirt",
     "anniversary t-shirt": "10th Anniversary Tshirt",
     "30th anniversary tshirt": "10th Anniversary Tshirt",
-    "item of the week stove": "Gas Stove", 
-    "item of the week": "Gas Stove",
     
     # Ammo / Guns Shortnames
     "lar": "LAR",
@@ -233,9 +237,11 @@ def build_search_index(price_dict, aliases):
 
 def clean_line_noise(line):
     """
-    Cleans up common filler words and standardizes separators.
-    CRITICAL FIX: Do NOT aggressively split 'x' characters, as it breaks ammo calibers.
+    Cleans up common filler words, standardizes separators, and removes :
     """
+    # FIX: Remove Colon that was causing errors
+    line = line.replace(":", " ")
+
     # Replace connectors with comma
     line = re.sub(r'\s+and\s+', ',', line, flags=re.IGNORECASE)
     line = re.sub(r'&', ',', line)
@@ -249,12 +255,11 @@ def clean_line_noise(line):
 
 def extract_from_chunk(text, search_index):
     """
-    Uses Manual Boundary Check to safely find items even with punctuation or 'x'.
+    Uses Manual Boundary Check to safely find items.
     """
     text_lower = text.lower()
     
     # 1. Sort keys by length (descending)
-    # This ensures "7.62x54" is found BEFORE "7.62"
     sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
     
     found_item_key = None
@@ -292,7 +297,6 @@ def extract_from_chunk(text, search_index):
             
     if found_item_key:
         # 3. REMOVE ITEM FROM TEXT TO ISOLATE QUANTITY
-        # Replace the first occurrence of the key
         text_without_item = text_lower.replace(found_item_key, " ", 1)
         
         # 4. FIND QUANTITY IN REMAINDER
@@ -321,15 +325,16 @@ def check_mode_switch(line):
     buy_keywords = [
         "want to buy", "buying", "wtb", "want to order", "ordering", "need", 
         "would like to buy", "would like to order", "like to buy", "looking to buy",
-        "buy:", "buying:", "going to grab", "grab", "picking up"
+        "buy", "buying", "going to grab", "grab", "picking up"
     ]
     for kw in buy_keywords:
+        # Ensure we match whole words if possible, or simple contains
         if kw in line_lower: return "COST", kw
         
     # --- PAYOUT / USER SELLING ---
     sell_keywords = [
         "want to sell", "selling", "wts", "i have", "have", "would like to sell",
-        "like to sell", "looking to sell", "sell:", "selling:"
+        "like to sell", "looking to sell", "sell", "selling"
     ]
     for kw in sell_keywords:
         if kw in line_lower: return "PAYOUT", kw
@@ -382,17 +387,23 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             # Determine Price & Source
             price = 0
             if found:
-                # Check Promo
-                if promo_info.get("active") and promo_info.get("name").lower() in item_name.lower():
-                     price = promo_info.get("price")
-                     item_name = f"🔥 {promo_info.get('name')}"
-                
-                elif promo_info.get("active") and "item of the week" in part.lower():
+                # 1. PROMO LOGIC: Check for specific "Item of the Week" Alias
+                if item_name == "🔥🔥PROMO_ITEM🔥🔥":
+                    if promo_info.get("active"):
+                         price = promo_info.get("price")
+                         item_name = f"🔥 {promo_info.get('name')}"
+                    else:
+                        # If promo isn't active, treat as error or generic
+                        item_name = "Item of the Week (No Active Promo)"
+                        price = 0
+
+                # 2. PROMO LOGIC: Check if detected item matches the promo name
+                elif promo_info.get("active") and promo_info.get("name").lower() in item_name.lower():
                      price = promo_info.get("price")
                      item_name = f"🔥 {promo_info.get('name')}"
                 
                 else:
-                    # Look up price
+                    # Look up price in standard DB
                     if current_mode == "COST":
                         price = price_dict_sell.get(item_name, 0)
                     else:
