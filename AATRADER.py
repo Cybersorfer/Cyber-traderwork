@@ -43,84 +43,66 @@ def get_pst_now():
 def get_pst_today():
     return get_pst_now().date()
 
-# --- ALIAS LIST ---
-# Updated with common failures seen in screenshots
+# --- ALIAS LIST (UPDATED FROM SCREENSHOTS) ---
 ALIASES = {
-    # Weapons & Ammo
+    # Typos & Short Names
+    "prn": "Pen", 
+    "ptn": "Pen",
+    "zagorty": "Zagorky",
+    "unknown food": "Unknown Food Can",
+    "sharpening stone": "Whetstone",
+    "sharpening stones": "Whetstone",
+    "anniversary tshirt": "10th Anniversary Tshirt",
+    "anniversary t-shirt": "10th Anniversary Tshirt",
+    "item of the week stove": "Gas Stove", # Assuming 'Gas Stove' is the promo item, adjust if needed
+    
+    # Ammo / Guns Shortnames
     "lar": "LAR",
     "m16": "M16-A2",     
     "m4": "M4-A1",      
     "ak": "KA-74",      
     "vs": "VSS",
-    "vs89": "VS-89",      
+    "vs89": "VS-89",
+    "vsd": "VSD",
+    "val": "SVAL",
     "weed": "cannabis seeds",
     "cannabis seed": "cannabis seeds",
     "nails": "Nail Box",
     "bolts": "Bolts (stack of 5)",
     "9v": "9V Battery",
     "electronic repair kit": "Electronic Repair Kit",
-    "sharpening stone": "Whetstone",
-    "sharpening stones": "Whetstone",
-    "unknown food": "Unknown Food Can",
     "seachests": "Seachest",
     "sea chest": "Seachest",
+    
+    # Caliber Mapping (Critical for 5.56 etc)
+    "5.56": "5.56x45 Ammo Box",
+    "5.45": "5.45x39 Ammo Box",
+    "7.62x39": "7.62x39 Ammo Box",
+    "7.62x54": "7.62x54 Ammo Box",
+    "308": ".308 WIN Ammo Box",
+    ".308": ".308 WIN Ammo Box",
+    ".357": ".357 Ammo Box",
+    "12g": "12ga Ammo Box",
+    "12ga": "12ga Ammo Box",
 
-    # --- MAGNIFYING SCOPES ($5,000) ---
+    # --- SCOPES ---
     "4x32 scopes": "All magnifying scopes",
     "4x32 scope": "All magnifying scopes",
-    "4x32": "All magnifying scopes",
     "hunting scope": "All magnifying scopes",
-    "hunting scope(4x-12x)": "All magnifying scopes",
-    "marksman scope": "All magnifying scopes",
-    "marksman scope(3x-9x)": "All magnifying scopes",
-    "pso-1 scope": "All magnifying scopes",
     "pso-1": "All magnifying scopes",
-    "pso-1-1 scope": "All magnifying scopes",
     "pso-1-1": "All magnifying scopes",
-    "pso-6 scope": "All magnifying scopes",
-    "pso-6": "All magnifying scopes",
-    "atog 6x48 scope": "All magnifying scopes",
-    "atog 6x48": "All magnifying scopes",
-    "atog 4x32 scope": "All magnifying scopes",
-    "atog 4x32": "All magnifying scopes",
     "pu scope": "All magnifying scopes",
-    "pu": "All magnifying scopes",
-    "c-1 scope": "All magnifying scopes",
-    "c-1": "All magnifying scopes",
-    "pistol scope": "All magnifying scopes",
-    "1pn51 scope": "All magnifying scopes",
-    "1pn51": "All magnifying scopes",
     "kazuar": "All magnifying scopes",
-    "starlight": "All magnifying scopes",
-
-    # --- NON-MAGNIFYING SCOPES ($3,000) ---
     "rvn": "All non-magnifying scopes",
-    "rvn sight": "All non-magnifying scopes",
     "kobra": "All non-magnifying scopes",
-    "kobra sight": "All non-magnifying scopes",
     "m68": "All non-magnifying scopes",
-    "comp m4": "All non-magnifying scopes",
-    "baraka": "All non-magnifying scopes",
-    "baraka sights": "All non-magnifying scopes",
-    "reflex": "All non-magnifying scopes",
-    "reflex sight": "All non-magnifying scopes",
-    "okp-7": "All non-magnifying scopes",
-    "okp": "All non-magnifying scopes",
     "red dot": "All non-magnifying scopes",
     "collimator": "All non-magnifying scopes",
     
-    # Tents & Storage
+    # Construction / Tents
     "large tents": "Large Tent",
     "medium tent": "Medium Tent",
     "canopy tent": "Canopy Tent",
-    "sea chests": "Seachest",
-    "seachests": "Seachest",
-    "blue barrel": "Barrel",
-    "green barrel": "Barrel",
-    "red barrel": "Barrel",
-    "yellow barrel": "Barrel",
-    
-    # Construction
     "construction lights": "Construction Light",
     "cable reels": "Cable Reel",
     "generator": "Generator",
@@ -245,52 +227,55 @@ def build_search_index(price_dict, aliases):
 
     return index
 
+def pre_clean_text(text):
+    """
+    Separates stuck multipliers like '10x' -> '10 x' and 'x5' -> 'x 5'
+    so regex can find words cleanly.
+    """
+    text = text.lower()
+    # Replace '10x' with '10 x'
+    text = re.sub(r'(\d)[xX]', r'\1 x ', text)
+    # Replace 'x10' with 'x 10'
+    text = re.sub(r'[xX](\d)', r' x \1', text)
+    return text
+
 def extract_from_chunk(text, search_index):
     """
     PRIORITY: Find Item FIRST, remove it from string, THEN find quantity in remainder.
-    This prevents "5.56" being read as quantity 5.
+    Uses precise Lookaround Regex to handle dots in calibers (.357, 5.56)
     """
-    text_lower = text.lower()
-    
-    # Sort keys by length (descending) to match specific items like ".308 win" before ".308"
+    # 1. Sort keys by length (descending) to match specific items first
     sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
     
     found_item_key = None
     real_name_result = None
     
-    # 1. SCAN FOR ITEM NAME
+    # 2. SCAN FOR ITEM NAME
     for key in sorted_keys:
-        # Custom Boundary Check:
-        # If key starts with a symbol (like .357), don't require \b at start.
-        # If key starts with letter/digit, require \b.
+        esc_key = re.escape(key)
         
-        pattern = ""
-        key_esc = re.escape(key)
+        # STRICT BOUNDARY LOGIC using Lookarounds:
+        # (?<!\w) -> Lookbehind: Ensure previous char is NOT a word char
+        # (?!\w)  -> Lookahead: Ensure next char is NOT a word char
+        # This allows ".357" to match because "." is not \w
+        # This allows "5.56" to match because "6" is followed by space/end
         
-        # Start Boundary
-        if key[0].isalnum():
-            pattern += r'\b' + key_esc
-        else:
-            # For .357, just ensure it's not preceded by a non-whitespace char? 
-            # Actually just standard matching is usually safer for symbols unless strict.
-            pattern += key_esc
-            
-        # End Boundary
-        if key[-1].isalnum():
-            pattern += r'\b'
-            
-        if re.search(pattern, text_lower):
+        pattern = r'(?<!\w)' + esc_key + r'(?!\w)'
+        
+        if re.search(pattern, text):
             found_item_key = key
             real_name_result = search_index[key]
             break
             
     if found_item_key:
-        # 2. REMOVE ITEM FROM TEXT TO ISOLATE QUANTITY
-        # We replace the found item with empty string
-        text_without_item = re.sub(re.escape(found_item_key), "", text_lower, count=1)
+        # 3. REMOVE ITEM FROM TEXT TO ISOLATE QUANTITY
+        # Use same pattern to remove exactly what we found
+        pattern = r'(?<!\w)' + re.escape(found_item_key) + r'(?!\w)'
+        text_without_item = re.sub(pattern, " ", text, count=1)
         
-        # 3. FIND QUANTITY IN REMAINDER
-        # Look for "x5", "5x", "x 5" or just standalone "5"
+        # 4. FIND QUANTITY IN REMAINDER
+        # Look for "x 5", "5 x", or just "5"
+        # Since we pre-cleaned, 'x' should be separated
         qty_match = re.search(r'[xX]\s*(\d+)|(\d+)\s*[xX]|(\d+)', text_without_item)
         
         if qty_match:
@@ -303,7 +288,7 @@ def extract_from_chunk(text, search_index):
         return real_name_result, quantity, True
         
     else:
-        # Fallback: Just look for a number if no item found, return raw text
+        # Fallback: Just look for a number if no item found
         qty_match = re.search(r'(\d+)', text)
         quantity = int(qty_match.group(1)) if qty_match else 1
         return text, quantity, False
@@ -331,6 +316,7 @@ def check_mode_switch(line):
     return None, None
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
+    # 1. Prepare Index
     combined_keys = {**price_dict_buy, **price_dict_sell} 
     search_index = build_search_index(combined_keys, ALIASES)
 
@@ -352,6 +338,9 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
         else:
             line_content = raw_line
 
+        # Pre-clean input (separate 10x to 10 x)
+        line_content = pre_clean_text(line_content)
+        
         # Split by comma
         comma_parts = line_content.split(',')
         
@@ -359,36 +348,39 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             part = part.strip()
             if not part: continue
             
-            # --- NEW EXTRACTION LOGIC ---
+            # --- EXTRACT ---
             item_name, qty, found = extract_from_chunk(part, search_index)
             
             # Determine Price & Source
             price = 0
             if found:
                 # Check Promo
+                # Simple loose match for promo name
                 if promo_info.get("active") and promo_info.get("name").lower() in item_name.lower():
                      price = promo_info.get("price")
                      item_name = f"🔥 {promo_info.get('name')}"
+                
+                # Check Promo Alias (e.g. "Item of the week")
+                elif promo_info.get("active") and "item of the week" in part.lower():
+                     price = promo_info.get("price")
+                     item_name = f"🔥 {promo_info.get('name')}"
+                
                 else:
-                    # Look up price in CURRENT mode list
+                    # Look up price
                     if current_mode == "COST":
                         price = price_dict_sell.get(item_name, 0)
                     else:
                         price = price_dict_buy.get(item_name, 0)
                     
-                    # IF price is 0 in current list, check the OTHER list just in case
-                    # (This fixes cases where user is 'Buying' an item that is only listed in WE_BUY by mistake, or vice versa)
+                    # Cross-check other list if 0 (handling User Error on mode)
                     if price == 0:
                         if current_mode == "COST":
                             alt_price = price_dict_buy.get(item_name, 0)
                         else:
                             alt_price = price_dict_sell.get(item_name, 0)
-                            
-                        # If found in the other list, we accept it but warn (or just use it)
-                        if alt_price > 0:
-                             price = alt_price
+                        if alt_price > 0: price = alt_price
 
-            # Construct Result Object
+            # Construct Result
             entry = {
                 "Item": item_name,
                 "Qty": qty,
@@ -404,7 +396,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
                 else:
                     new_payout_items.append(entry)
             else:
-                # Found but price is 0 OR Not Found
                 new_missing_items.append(entry)
                 
     return new_payout_items, new_cost_items, new_missing_items
@@ -420,7 +411,7 @@ def render_result_tables():
         
         m_df = st.session_state.missing_df
         
-        # Iterate through missing items to create selectors
+        # Iterate through missing items
         for index, row in m_df.iterrows():
             c1, c2, c3 = st.columns([3, 1, 3])
             with c1:
