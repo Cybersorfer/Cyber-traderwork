@@ -44,17 +44,16 @@ def get_pst_today():
     return get_pst_now().date()
 
 # --- ALIAS LIST ---
+# Note: You don't need to add plurals here anymore (e.g. "nails" matches "nail box" automatically via logic)
 ALIASES = {
     # Weapons & Ammo
     "lar": "LAR",
-    "lars": "LAR",       
     "m16": "M16-A2",     
     "m4": "M4-A1",      
     "ak": "KA-74",      
     "vs": "VSS",
     "vs89": "VS-89",      
     "weed": "cannabis seeds",
-    "seeds": "cannabis seeds",
     "cannabis seed": "cannabis seeds",
     "nails": "Nail Box",
     "bolts": "Bolts (stack of 5)",
@@ -107,11 +106,9 @@ ALIASES = {
     
     # Tents & Storage
     "large tents": "Large Tent",
-    "large tent": "Large Tent",
     "medium tent": "Medium Tent",
     "canopy tent": "Canopy Tent",
     "sea chests": "Seachest",
-    "sea chest": "Seachest",
     "seachests": "Seachest",
     "blue barrel": "Barrel",
     "green barrel": "Barrel",
@@ -126,21 +123,6 @@ ALIASES = {
     "santa hats": "Santa Hat",
     "santa beard": "Santa Beard"
 }
-
-# --- JUNK WORD REMOVER ---
-FILLERS = [
-    "pack of", "packs of", "box of", "can of",
-    "cr550", "item of the week", "for the",
-    "stored in", "inside", "would like to",
-    "hi i'd like to", "please", "thank you", "thanks"
-]
-
-# --- VARIANT STRIPPER ---
-VARIANTS = [
-    "(black)", "(green)", "(tan)", "(camo)", "(winter)", "(summer)", 
-    "(pink)", "(blue)", "(red)", "(yellow)", "(white)", "(grey)", "(gray)",
-    "black", "green", "tan", "camo", "winter", "summer", "pink", "blue", "red", "yellow", "white"
-]
 
 # --- CUSTOM CSS ---
 def set_theme():
@@ -218,83 +200,77 @@ def load_all_promos():
 def save_all_promos(data):
     with open(PROMO_FILE, 'w') as f: json.dump(data, f)
 
-def clean_noise(text):
-    text = re.sub(r'\$[\d,]+', '', text)
-    text = re.sub(r'=\s*[\d,]+', '', text)
-    if "total" in text.lower(): return ""
-    return re.sub(r'[^a-zA-Z0-9\-\.\(\) ]', '', text)
+# --- NEW SMART PARSING LOGIC ---
 
-def strip_variants(text):
-    text_lower = text.lower()
-    for v in VARIANTS:
-        text_lower = text_lower.replace(v, "")
-    text_lower = text_lower.replace("()", "").strip()
-    return text_lower
+def simple_pluralize(word):
+    """Simple logic to generate basic plurals for the index."""
+    word = word.lower().strip()
+    if word.endswith('s'):
+        return word # Already looks plural
+    if word.endswith('y'):
+        return word[:-1] + "ies" # Battery -> Batteries
+    if word.endswith('x') or word.endswith('ch') or word.endswith('sh'):
+        return word + "es" # Box -> Boxes
+    return word + "s" # Gun -> Guns
 
-def smart_parse_line(line, price_dict, promo_info):
-    if "locker code" in line.lower() or "combo" in line.lower(): return None
-
-    line = clean_noise(line).strip()
-    if not line or len(line) < 2: return None
-
-    quantity = 1
-    item_clean = line
-
-    match_start = re.match(r'^(\d+)\s*[xX\-\.]?\s*(.*)', line)
-    match_end = re.search(r'(.*)\s+[xX\-\.]?\s*(\d+)$', line)
-
-    if match_start:
-        quantity = int(match_start.group(1))
-        item_clean = match_start.group(2).strip()
-    elif match_end:
-        quantity = int(match_end.group(2))
-        item_clean = match_end.group(1).strip()
-
-    for filler in FILLERS:
-        item_clean = item_clean.replace(filler, "").strip()
-
-    if item_clean.lower() in ALIASES:
-        item_clean = ALIASES[item_clean.lower()]
-
-    # --- MATCHING LOGIC ---
+@st.cache_data
+def build_search_index(price_dict, aliases):
+    """
+    Creates a massive lookup dictionary:
+    { "eggs": "Egg", "egg": "Egg", "m4": "M4-A1", "m4s": "M4-A1", ... }
+    """
+    index = {}
     
-    # 1. PROMO MATCH
-    s_active = promo_info.get("active", False)
-    s_name = promo_info.get("name", "")
-    s_price = promo_info.get("price", 0)
-    s_expiry = promo_info.get("expiry_date", get_pst_today())
+    # 1. Add Manual Aliases (and their plurals)
+    for alias, real_name in aliases.items():
+        clean_alias = alias.lower()
+        index[clean_alias] = real_name
+        index[simple_pluralize(clean_alias)] = real_name
 
-    if (s_name and s_name.lower() in item_clean.lower()):
-        if s_active and get_pst_today() <= s_expiry:
-             return {"Item": f"🔥 {s_name}", "Qty": quantity, "Unit Price": s_price, "Total": quantity * s_price, "Found": True}
+    # 2. Add Database Items (and their plurals)
+    for real_name in price_dict.keys():
+        clean_name = str(real_name).lower()
+        
+        # Add exact name
+        index[clean_name] = real_name
+        
+        # Add plural version
+        index[simple_pluralize(clean_name)] = real_name
+        
+        # Add version without parentheses (e.g., "burlap strips (2)" -> "burlap strips")
+        no_variant = re.sub(r'\(.*?\)', '', clean_name).strip()
+        if no_variant:
+            index[no_variant] = real_name
+            index[simple_pluralize(no_variant)] = real_name
 
-    exact_map = {str(k).lower(): str(k) for k in price_dict if k}
-    
-    # 2. EXACT MATCH
-    if item_clean.lower() in exact_map:
-        real_key = exact_map[item_clean.lower()]
-        return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key], "Found": True}
+    return index
 
-    # 3. VARIANT STRIP MATCH
-    item_no_variant = strip_variants(item_clean)
-    if item_no_variant in exact_map:
-        real_key = exact_map[item_no_variant]
-        return {"Item": real_key, "Qty": quantity, "Unit Price": price_dict[real_key], "Total": quantity * price_dict[real_key], "Found": True}
+def extract_from_chunk(text, search_index):
+    """
+    Scans a text chunk for a known item in the index.
+    Ignores garbage words. Finds the number closest to the match.
+    """
+    # 1. Find Quantity (default to 1)
+    # This regex finds the first number in the chunk
+    qty_match = re.search(r'(\d+)', text)
+    quantity = int(qty_match.group(1)) if qty_match else 1
+    
+    # 2. Normalize Text for searching
+    text_clean = text.lower()
+    
+    # 3. EXACT / KEYWORD SEARCH
+    # We sort keys by length (descending) so we match "Large Tent" before "Tent"
+    sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
+    
+    # Scan for keywords
+    for key in sorted_keys:
+        # \b ensures we don't match "apple" inside "pineapple"
+        # We escape key to handle parentheses in regex
+        if re.search(r'\b' + re.escape(key) + r'\b', text_clean):
+            real_name = search_index[key]
+            return real_name, quantity, True
 
-    # 4. FUZZY MATCH
-    choices = [str(k) for k in price_dict.keys() if k]
-    if not choices: 
-        return {"Item": item_clean, "Qty": quantity, "Unit Price": 0, "Total": 0, "Found": False}
-    
-    match, score = process.extractOne(item_no_variant, choices)
-    
-    # GUARD: Failed Match
-    if score < 85: 
-        return {"Item": item_clean, "Qty": quantity, "Unit Price": 0, "Total": 0, "Found": False}
-    if len(item_no_variant) <= 4 and item_no_variant not in match.lower(): 
-        return {"Item": item_clean, "Qty": quantity, "Unit Price": 0, "Total": 0, "Found": False}
-    
-    return {"Item": match, "Qty": quantity, "Unit Price": price_dict[match], "Total": quantity * price_dict[match], "Found": True}
+    return text, quantity, False
 
 def check_mode_switch(line):
     line_lower = line.lower()
@@ -315,15 +291,22 @@ def check_mode_switch(line):
     return None, None
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
+    # 1. Build Index (Combine Buy/Sell keys so we recognize items regardless of context)
+    combined_keys = {**price_dict_buy, **price_dict_sell} 
+    search_index = build_search_index(combined_keys, ALIASES)
+
     raw_lines = input_text.split('\n')
-    new_payout_items = []
-    new_cost_items = []
+    new_payout_items = []   # We Buy
+    new_cost_items = []     # We Sell (Trader Sells)
     new_missing_items = []
+    
+    # Default mode
     current_mode = "PAYOUT" 
     
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
         
+        # Check for Mode Switching
         new_mode, keyword = check_mode_switch(raw_line)
         if new_mode:
             current_mode = new_mode
@@ -331,30 +314,48 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
         else:
             line_content = raw_line
 
+        # Split by comma to handle lists like "5 eggs, 2 bacon"
         comma_parts = line_content.split(',')
         
         for part in comma_parts:
             part = part.strip()
             if not part: continue
             
-            # Identify which DB to check
-            if current_mode == "COST":
-                db = price_dict_sell
-            else:
-                db = price_dict_buy
-
-            parsed = smart_parse_line(part, db, promo_info)
-            if parsed:
-                # Add the "Type" (COST vs PAYOUT) so we know where to assign funds later
-                parsed["Type"] = current_mode
-                
-                if parsed["Found"]:
-                    if current_mode == "COST":
-                        new_cost_items.append(parsed)
-                    else:
-                        new_payout_items.append(parsed)
+            # --- NEW EXTRACTION LOGIC ---
+            item_name, qty, found = extract_from_chunk(part, search_index)
+            
+            # Determine Price & Source
+            price = 0
+            if found:
+                # Check Promo First
+                if promo_info.get("active") and promo_info.get("name").lower() in item_name.lower():
+                     price = promo_info.get("price")
+                     item_name = f"🔥 {promo_info.get('name')}"
                 else:
-                    new_missing_items.append(parsed)
+                    # Look up price based on current mode
+                    if current_mode == "COST":
+                        price = price_dict_sell.get(item_name, 0)
+                    else:
+                        price = price_dict_buy.get(item_name, 0)
+
+            # Construct Result Object
+            entry = {
+                "Item": item_name,
+                "Qty": qty,
+                "Unit Price": price,
+                "Total": qty * price,
+                "Found": found,
+                "Type": current_mode
+            }
+
+            if found and price > 0:
+                if current_mode == "COST":
+                    new_cost_items.append(entry)
+                else:
+                    new_payout_items.append(entry)
+            else:
+                # Either not found, or found but price is 0 (mismatch in buy/sell lists)
+                new_missing_items.append(entry)
                 
     return new_payout_items, new_cost_items, new_missing_items
 
