@@ -43,18 +43,21 @@ def get_pst_now():
 def get_pst_today():
     return get_pst_now().date()
 
-# --- ALIAS LIST ---
+# --- ALIAS LIST (EXPANDED WITH SCREENSHOT FIXES) ---
 ALIASES = {
     # Typos & Short Names
     "prn": "Pen", 
     "ptn": "Pen",
+    "pm": "Pen",
     "zagorty": "Zagorky",
     "unknown food": "Unknown Food Can",
     "sharpening stone": "Whetstone",
     "sharpening stones": "Whetstone",
     "anniversary tshirt": "10th Anniversary Tshirt",
     "anniversary t-shirt": "10th Anniversary Tshirt",
+    "30th anniversary tshirt": "10th Anniversary Tshirt",
     "item of the week stove": "Gas Stove", 
+    "item of the week": "Gas Stove", # Catch-all if needed
     
     # Ammo / Guns Shortnames
     "lar": "LAR",
@@ -73,6 +76,8 @@ ALIASES = {
     "electronic repair kit": "Electronic Repair Kit",
     "seachests": "Seachest",
     "sea chest": "Seachest",
+    "sea chests": "Seachest",
+    "blue locker": "Locker", # Ignore or map if needed
     
     # Caliber Mapping 
     "5.56": "5.56x45 Ammo Box",
@@ -82,6 +87,7 @@ ALIASES = {
     "7.62x54r": "7.62x54 Ammo Box", 
     "308": ".308 WIN Ammo Box",
     ".308": ".308 WIN Ammo Box",
+    "357": ".357 Ammo Box",
     ".357": ".357 Ammo Box",
     "12g": "12ga Ammo Box",
     "12ga": "12ga Ammo Box",
@@ -225,44 +231,75 @@ def build_search_index(price_dict, aliases):
 
     return index
 
+def clean_line_noise(line):
+    """
+    Cleans up common filler words and standardizes separators.
+    """
+    # Replace connectors with comma
+    line = re.sub(r'\s+and\s+', ',', line, flags=re.IGNORECASE)
+    line = re.sub(r'&', ',', line)
+    
+    # Remove filler words
+    noise_words = ["box of", "boxes of", "box with", "pack of", "packs of", "can of", "cans of", " with "]
+    for noise in noise_words:
+        line = line.replace(noise, " ")
+        
+    # Standardize 'x' spacing (ensure 10x becomes 10 x, and x10 becomes x 10)
+    # This helps distinct word extraction
+    line = re.sub(r'(\d)x', r'\1 x', line, flags=re.IGNORECASE)
+    line = re.sub(r'x(\d)', r'x \1', line, flags=re.IGNORECASE)
+    
+    return line
+
 def extract_from_chunk(text, search_index):
     """
-    PRIORITY: Find Item FIRST based on Length.
-    Boundary logic allows 'x' neighbors to support '10x5.56' or '7.62x54'.
+    Uses Manual Boundary Check to safely find items even with punctuation or 'x'.
     """
     text_lower = text.lower()
     
-    # 1. Sort keys by length (descending). 
-    # This ensures "7.62x54" (len 7) is checked before "7.62" (len 4).
+    # 1. Sort keys by length (descending)
     sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
     
     found_item_key = None
     real_name_result = None
     
-    # 2. SCAN FOR ITEM NAME
+    # 2. SCAN FOR ITEM NAME (MANUAL CHECK)
     for key in sorted_keys:
-        esc_key = re.escape(key)
+        start_idx = text_lower.find(key)
         
-        # LOOKAROUND REGEX:
-        # (?<![a-wy-zA-WY-Z]) -> Not preceded by a letter (EXCEPT x, X)
-        # (?![a-wy-zA-WY-Z])  -> Not followed by a letter (EXCEPT x, X)
-        # This allows 'x' to touch the item (for multipliers), but blocks 'Apple' in 'Pineapple'.
-        
-        pattern = r'(?<![a-wy-zA-WY-Z])' + esc_key + r'(?![a-wy-zA-WY-Z])'
-        
-        if re.search(pattern, text_lower):
-            found_item_key = key
-            real_name_result = search_index[key]
-            break
+        if start_idx != -1:
+            end_idx = start_idx + len(key)
+            
+            # Check Boundary Before
+            valid_start = True
+            if start_idx > 0:
+                char_before = text_lower[start_idx - 1]
+                # If char before is a letter, it's a partial match (bad).
+                # Exception: 'x' is allowed (e.g. 10xItem)
+                if char_before.isalpha() and char_before != 'x':
+                    valid_start = False
+            
+            # Check Boundary After
+            valid_end = True
+            if end_idx < len(text_lower):
+                char_after = text_lower[end_idx]
+                # If char after is a letter, it's a partial match (bad).
+                # Exception: 'x' is allowed (e.g. Itemx10)
+                if char_after.isalpha() and char_after != 'x':
+                    valid_end = False
+            
+            if valid_start and valid_end:
+                found_item_key = key
+                real_name_result = search_index[key]
+                break
             
     if found_item_key:
         # 3. REMOVE ITEM FROM TEXT TO ISOLATE QUANTITY
-        # Use same pattern to remove exactly what we found
-        pattern = r'(?<![a-wy-zA-WY-Z])' + re.escape(found_item_key) + r'(?![a-wy-zA-WY-Z])'
-        text_without_item = re.sub(pattern, " ", text_lower, count=1)
+        # Replace the first occurrence of the key
+        text_without_item = text_lower.replace(found_item_key, " ", 1)
         
         # 4. FIND QUANTITY IN REMAINDER
-        # Look for "x 5", "5 x", "10x", "x5", or just "5"
+        # Look for "x 5", "5 x", "5"
         qty_match = re.search(r'[xX]\s*(\d+)|(\d+)\s*[xX]|(\d+)', text_without_item)
         
         if qty_match:
@@ -302,6 +339,12 @@ def check_mode_switch(line):
         
     return None, None
 
+def is_ignored_line(line):
+    # Lines that should be skipped entirely
+    ignore_starts = ["hello", "hi ", "dropping off", "code", "locker code", "blue locker"]
+    line_clean = line.lower().strip()
+    return any(line_clean.startswith(x) for x in ignore_starts)
+
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     # 1. Prepare Index
     combined_keys = {**price_dict_buy, **price_dict_sell} 
@@ -316,6 +359,7 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
+        if is_ignored_line(raw_line): continue
         
         # Check for Mode Switching
         new_mode, keyword = check_mode_switch(raw_line)
@@ -325,10 +369,8 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
         else:
             line_content = raw_line
 
-        # --- FIX: Treat " and " or "&" as Commas ---
-        # This ensures "10x 5.56 and 4 stones" becomes "10x 5.56 , 4 stones"
-        # The regex looks for whitespace-and-whitespace OR ampersand
-        line_content = re.sub(r'\s+(?:and|&)\s+', ',', line_content, flags=re.IGNORECASE)
+        # --- PRE-PROCESS LINE ---
+        line_content = clean_line_noise(line_content)
 
         # Split by comma
         comma_parts = line_content.split(',')
@@ -348,7 +390,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
                      price = promo_info.get("price")
                      item_name = f"🔥 {promo_info.get('name')}"
                 
-                # Check Promo Alias (e.g. "Item of the week")
                 elif promo_info.get("active") and "item of the week" in part.lower():
                      price = promo_info.get("price")
                      item_name = f"🔥 {promo_info.get('name')}"
@@ -360,7 +401,7 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
                     else:
                         price = price_dict_buy.get(item_name, 0)
                     
-                    # Cross-check other list if 0 (handling User Error on mode)
+                    # Cross-check other list if 0
                     if price == 0:
                         if current_mode == "COST":
                             alt_price = price_dict_buy.get(item_name, 0)
