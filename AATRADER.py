@@ -44,7 +44,7 @@ def get_pst_today():
     return get_pst_now().date()
 
 # --- ALIAS LIST ---
-# Note: You don't need to add plurals here anymore (e.g. "nails" matches "nail box" automatically via logic)
+# Updated with common failures seen in screenshots
 ALIASES = {
     # Weapons & Ammo
     "lar": "LAR",
@@ -59,6 +59,11 @@ ALIASES = {
     "bolts": "Bolts (stack of 5)",
     "9v": "9V Battery",
     "electronic repair kit": "Electronic Repair Kit",
+    "sharpening stone": "Whetstone",
+    "sharpening stones": "Whetstone",
+    "unknown food": "Unknown Food Can",
+    "seachests": "Seachest",
+    "sea chest": "Seachest",
 
     # --- MAGNIFYING SCOPES ($5,000) ---
     "4x32 scopes": "All magnifying scopes",
@@ -206,34 +211,29 @@ def simple_pluralize(word):
     """Simple logic to generate basic plurals for the index."""
     word = word.lower().strip()
     if word.endswith('s'):
-        return word # Already looks plural
+        return word 
     if word.endswith('y'):
-        return word[:-1] + "ies" # Battery -> Batteries
+        return word[:-1] + "ies" 
     if word.endswith('x') or word.endswith('ch') or word.endswith('sh'):
-        return word + "es" # Box -> Boxes
-    return word + "s" # Gun -> Guns
+        return word + "es"
+    return word + "s"
 
 @st.cache_data
 def build_search_index(price_dict, aliases):
-    """
-    Creates a massive lookup dictionary:
-    { "eggs": "Egg", "egg": "Egg", "m4": "M4-A1", "m4s": "M4-A1", ... }
-    """
     index = {}
     
-    # 1. Add Manual Aliases (and their plurals)
+    # 1. Add Manual Aliases
     for alias, real_name in aliases.items():
         clean_alias = alias.lower()
         index[clean_alias] = real_name
         index[simple_pluralize(clean_alias)] = real_name
 
-    # 2. Add Database Items (and their plurals)
+    # 2. Add Database Items
     for real_name in price_dict.keys():
         clean_name = str(real_name).lower()
         
         # Add exact name
         index[clean_name] = real_name
-        
         # Add plural version
         index[simple_pluralize(clean_name)] = real_name
         
@@ -247,43 +247,83 @@ def build_search_index(price_dict, aliases):
 
 def extract_from_chunk(text, search_index):
     """
-    Scans a text chunk for a known item in the index.
-    Ignores garbage words. Finds the number closest to the match.
+    PRIORITY: Find Item FIRST, remove it from string, THEN find quantity in remainder.
+    This prevents "5.56" being read as quantity 5.
     """
-    # 1. Find Quantity (default to 1)
-    # This regex finds the first number in the chunk
-    qty_match = re.search(r'(\d+)', text)
-    quantity = int(qty_match.group(1)) if qty_match else 1
+    text_lower = text.lower()
     
-    # 2. Normalize Text for searching
-    text_clean = text.lower()
-    
-    # 3. EXACT / KEYWORD SEARCH
-    # We sort keys by length (descending) so we match "Large Tent" before "Tent"
+    # Sort keys by length (descending) to match specific items like ".308 win" before ".308"
     sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
     
-    # Scan for keywords
+    found_item_key = None
+    real_name_result = None
+    
+    # 1. SCAN FOR ITEM NAME
     for key in sorted_keys:
-        # \b ensures we don't match "apple" inside "pineapple"
-        # We escape key to handle parentheses in regex
-        if re.search(r'\b' + re.escape(key) + r'\b', text_clean):
-            real_name = search_index[key]
-            return real_name, quantity, True
-
-    return text, quantity, False
+        # Custom Boundary Check:
+        # If key starts with a symbol (like .357), don't require \b at start.
+        # If key starts with letter/digit, require \b.
+        
+        pattern = ""
+        key_esc = re.escape(key)
+        
+        # Start Boundary
+        if key[0].isalnum():
+            pattern += r'\b' + key_esc
+        else:
+            # For .357, just ensure it's not preceded by a non-whitespace char? 
+            # Actually just standard matching is usually safer for symbols unless strict.
+            pattern += key_esc
+            
+        # End Boundary
+        if key[-1].isalnum():
+            pattern += r'\b'
+            
+        if re.search(pattern, text_lower):
+            found_item_key = key
+            real_name_result = search_index[key]
+            break
+            
+    if found_item_key:
+        # 2. REMOVE ITEM FROM TEXT TO ISOLATE QUANTITY
+        # We replace the found item with empty string
+        text_without_item = re.sub(re.escape(found_item_key), "", text_lower, count=1)
+        
+        # 3. FIND QUANTITY IN REMAINDER
+        # Look for "x5", "5x", "x 5" or just standalone "5"
+        qty_match = re.search(r'[xX]\s*(\d+)|(\d+)\s*[xX]|(\d+)', text_without_item)
+        
+        if qty_match:
+            # Grab the first non-None group
+            q_str = next((g for g in qty_match.groups() if g is not None), "1")
+            quantity = int(q_str)
+        else:
+            quantity = 1
+            
+        return real_name_result, quantity, True
+        
+    else:
+        # Fallback: Just look for a number if no item found, return raw text
+        qty_match = re.search(r'(\d+)', text)
+        quantity = int(qty_match.group(1)) if qty_match else 1
+        return text, quantity, False
 
 def check_mode_switch(line):
     line_lower = line.lower()
+    
+    # --- COST / USER BUYING ---
     buy_keywords = [
         "want to buy", "buying", "wtb", "want to order", "ordering", "need", 
-        "would like to buy", "would like to order", "like to buy", "looking to buy"
+        "would like to buy", "would like to order", "like to buy", "looking to buy",
+        "buy:", "buying:", "going to grab", "grab", "picking up"
     ]
     for kw in buy_keywords:
         if kw in line_lower: return "COST", kw
         
+    # --- PAYOUT / USER SELLING ---
     sell_keywords = [
         "want to sell", "selling", "wts", "i have", "have", "would like to sell",
-        "like to sell", "looking to sell"
+        "like to sell", "looking to sell", "sell:", "selling:"
     ]
     for kw in sell_keywords:
         if kw in line_lower: return "PAYOUT", kw
@@ -291,7 +331,6 @@ def check_mode_switch(line):
     return None, None
 
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
-    # 1. Build Index (Combine Buy/Sell keys so we recognize items regardless of context)
     combined_keys = {**price_dict_buy, **price_dict_sell} 
     search_index = build_search_index(combined_keys, ALIASES)
 
@@ -300,7 +339,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     new_cost_items = []     # We Sell (Trader Sells)
     new_missing_items = []
     
-    # Default mode
     current_mode = "PAYOUT" 
     
     for raw_line in raw_lines:
@@ -314,7 +352,7 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
         else:
             line_content = raw_line
 
-        # Split by comma to handle lists like "5 eggs, 2 bacon"
+        # Split by comma
         comma_parts = line_content.split(',')
         
         for part in comma_parts:
@@ -327,16 +365,28 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             # Determine Price & Source
             price = 0
             if found:
-                # Check Promo First
+                # Check Promo
                 if promo_info.get("active") and promo_info.get("name").lower() in item_name.lower():
                      price = promo_info.get("price")
                      item_name = f"🔥 {promo_info.get('name')}"
                 else:
-                    # Look up price based on current mode
+                    # Look up price in CURRENT mode list
                     if current_mode == "COST":
                         price = price_dict_sell.get(item_name, 0)
                     else:
                         price = price_dict_buy.get(item_name, 0)
+                    
+                    # IF price is 0 in current list, check the OTHER list just in case
+                    # (This fixes cases where user is 'Buying' an item that is only listed in WE_BUY by mistake, or vice versa)
+                    if price == 0:
+                        if current_mode == "COST":
+                            alt_price = price_dict_buy.get(item_name, 0)
+                        else:
+                            alt_price = price_dict_sell.get(item_name, 0)
+                            
+                        # If found in the other list, we accept it but warn (or just use it)
+                        if alt_price > 0:
+                             price = alt_price
 
             # Construct Result Object
             entry = {
@@ -354,7 +404,7 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
                 else:
                     new_payout_items.append(entry)
             else:
-                # Either not found, or found but price is 0 (mismatch in buy/sell lists)
+                # Found but price is 0 OR Not Found
                 new_missing_items.append(entry)
                 
     return new_payout_items, new_cost_items, new_missing_items
@@ -378,7 +428,6 @@ def render_result_tables():
             with c2:
                 st.caption(f"Type: {row['Type']}")
             with c3:
-                # Unique key per row so they don't conflict
                 cat_key = f"cat_{index}_{row['Item']}"
                 selected_cat = st.selectbox(
                     "Assign Category:", 
@@ -387,11 +436,9 @@ def render_result_tables():
                     label_visibility="collapsed"
                 )
                 
-                # Math Logic
                 price = GENERIC_PRICES[selected_cat]
                 line_total = price * row['Qty']
                 
-                # Add to the correct running total
                 if line_total > 0:
                     if row['Type'] == "PAYOUT":
                         resolved_payout += line_total
@@ -415,7 +462,6 @@ def render_result_tables():
     else:
         st.info("No Payout items found in database.")
 
-    # FINAL PAYOUT MATH
     final_payout = payout_db_total + resolved_payout
     if resolved_payout > 0:
         st.success(f"### Total: ${payout_db_total:,} (DB) + ${resolved_payout:,} (Resolved) = ${final_payout:,}")
@@ -438,7 +484,6 @@ def render_result_tables():
     else:
         st.info("No Cost items found in database.")
 
-    # FINAL COST MATH
     final_cost = cost_db_total + resolved_cost
     if resolved_cost > 0:
         st.error(f"### Total: ${cost_db_total:,} (DB) + ${resolved_cost:,} (Resolved) = ${final_cost:,}")
