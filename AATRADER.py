@@ -43,7 +43,7 @@ def get_pst_now():
 def get_pst_today():
     return get_pst_now().date()
 
-# --- ALIAS LIST (EXPANDED WITH SCREENSHOT FIXES) ---
+# --- ALIAS LIST ---
 ALIASES = {
     # Typos & Short Names
     "prn": "Pen", 
@@ -57,7 +57,7 @@ ALIASES = {
     "anniversary t-shirt": "10th Anniversary Tshirt",
     "30th anniversary tshirt": "10th Anniversary Tshirt",
     "item of the week stove": "Gas Stove", 
-    "item of the week": "Gas Stove", # Catch-all if needed
+    "item of the week": "Gas Stove",
     
     # Ammo / Guns Shortnames
     "lar": "LAR",
@@ -77,7 +77,7 @@ ALIASES = {
     "seachests": "Seachest",
     "sea chest": "Seachest",
     "sea chests": "Seachest",
-    "blue locker": "Locker", # Ignore or map if needed
+    "blue locker": "Locker",
     
     # Caliber Mapping 
     "5.56": "5.56x45 Ammo Box",
@@ -234,6 +234,7 @@ def build_search_index(price_dict, aliases):
 def clean_line_noise(line):
     """
     Cleans up common filler words and standardizes separators.
+    CRITICAL FIX: Do NOT aggressively split 'x' characters, as it breaks ammo calibers.
     """
     # Replace connectors with comma
     line = re.sub(r'\s+and\s+', ',', line, flags=re.IGNORECASE)
@@ -243,11 +244,6 @@ def clean_line_noise(line):
     noise_words = ["box of", "boxes of", "box with", "pack of", "packs of", "can of", "cans of", " with "]
     for noise in noise_words:
         line = line.replace(noise, " ")
-        
-    # Standardize 'x' spacing (ensure 10x becomes 10 x, and x10 becomes x 10)
-    # This helps distinct word extraction
-    line = re.sub(r'(\d)x', r'\1 x', line, flags=re.IGNORECASE)
-    line = re.sub(r'x(\d)', r'x \1', line, flags=re.IGNORECASE)
     
     return line
 
@@ -258,6 +254,7 @@ def extract_from_chunk(text, search_index):
     text_lower = text.lower()
     
     # 1. Sort keys by length (descending)
+    # This ensures "7.62x54" is found BEFORE "7.62"
     sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
     
     found_item_key = None
