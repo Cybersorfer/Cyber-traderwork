@@ -75,12 +75,11 @@ ALIASES = {
     "sea chest": "Seachest",
     
     # Caliber Mapping 
-    # NOTE: "7.62x54" is usually in the DB, but "5.56" often isn't.
     "5.56": "5.56x45 Ammo Box",
     "5.45": "5.45x39 Ammo Box",
     "7.62x39": "7.62x39 Ammo Box",
     "7.62x54": "7.62x54 Ammo Box",
-    "7.62x54r": "7.62x54 Ammo Box", # Handle 'r' variant
+    "7.62x54r": "7.62x54 Ammo Box", 
     "308": ".308 WIN Ammo Box",
     ".308": ".308 WIN Ammo Box",
     ".357": ".357 Ammo Box",
@@ -325,6 +324,11 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             line_content = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
         else:
             line_content = raw_line
+
+        # --- FIX: Treat " and " or "&" as Commas ---
+        # This ensures "10x 5.56 and 4 stones" becomes "10x 5.56 , 4 stones"
+        # The regex looks for whitespace-and-whitespace OR ampersand
+        line_content = re.sub(r'\s+(?:and|&)\s+', ',', line_content, flags=re.IGNORECASE)
 
         # Split by comma
         comma_parts = line_content.split(',')
