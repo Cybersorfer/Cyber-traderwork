@@ -122,6 +122,12 @@ ALIASES = {
     "Car Wheel": "Car Wheels",
     "Wheels": "Car Wheels",
     "Wheel": "Car Wheels",
+    "Hack saw": "Hacksaw",
+    "Hecksaw": "Hacksaw",
+    "Pick axe": "Pickaxe",
+    "Pack axe": "Pickaxe",
+    "sharpening stone": "Whetstone",
+    "sharping  stone": "Whetstone",
 
     # Ammo / Guns Shortnames
     "M79": "M79 Grenade Launcher",
