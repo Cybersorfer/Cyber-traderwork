@@ -57,6 +57,7 @@ ALIASES = {
     "prn": "Pen", 
     "ptn": "Pen",
     "pm": "Pen",
+    "Pencil": "Pen",
     "zagorty": "Zagorky",
     "zagorky snacks": "Zagorky",
     "unknown food": "Unknown Food Can",
