@@ -2,7 +2,7 @@
   "WE_BUY": {
     "wooden crate full of weed": 5000, "Weed (per bud)": 100, "Bear Pelt": 2000, "Elk Pelt": 1000, "Deer Pelt": 1000, "Wolf Pelt": 500,
     "AUG-AX": 4000, "DMR": 6000, "KA-101": 4000, "KA-M": 3000, "KAM": 3000, "LAR": 6000, "M16-A2": 3000, "M16": 3000,
-    "M4-A1": 3000, "M4": 3000, "Savannah": 3000, "SVAL": 4000, "Vaiga": 4000, "Vikhr": 4000, "VS-89": 4000,
+    "M4-A1": 3000, "M4": 3000, "Savanna": 3000, "SVAL": 4000, "Vaiga": 4000, "Vikhr": 4000, "VS-89": 4000,
     "VSD": 6000, "VSS": 3000, "Bibles": 4000, "Egg": 2000, "Eggs": 2000,  "Yellow Scarred Moto Helmet": 10000,
     "Alarm Clock": 1000, "Kitchen Timer": 1000, "Pen": 2000, "Santa Beard": 1000, "Santa Hat": 1000,
     "Unknown Food Can": 1000, "Zagorky Snacks": 2000, "10th Anniversary Tshirt": 2000, "10th Anniversary T-shirt": 2000, "10th Anniversary shirt": 2000,
@@ -31,7 +31,7 @@
     "Mlock-91": 15000, "Revolver": 15000, "SG5-K": 20000, "USG-45": 23000, "KAs-74U": 18000,
     "KA-74": 23000, "M16": 25000, "SVAL": 23000, "KA101": 33000, "AUR AX": 25000, "M4-A1": 25000,
     "LAR": 35000, "KA-M": 25000, "VS-89": 28000, "VSS": 25000, "VSD": 35000, "DMR": 35000,
-    "VIKHR": 28000, "CR-527": 10000, "SSG": 18000, "Savannah": 25000, "Tundra": 20000,
+    "VIKHR": 28000, "CR-527": 10000, "SSG": 18000, "Savanna": 25000, "Tundra": 20000,
     "Vaiga": 28000, "R12": 18000, "Crossbow": 18000, "M79 Grenade Launcher": 25000,
     ".308 WIN Box": 4000, "7.62x54 Box": 2000, "5.56x45 Box": 2000, "Plate Carrier": 10000,
     "Tactical Vest": 8000, "Hunter Vest": 8000, "Field Bag": 10000, "Field Backpack": 10000, "Mountain Backpack": 9000, "Mountain Bag": 9000,
@@ -149,6 +149,7 @@
     "FREE": 0
   }
 }
+
 
 
 
