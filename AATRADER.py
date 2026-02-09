@@ -160,6 +160,7 @@ ALIASES = {
     
     # Caliber Mapping 
     ".22": ".22 LR Ammo Box",
+    ".22r": ".22 LR Ammo Box",
     "5.56": "5.56x45 Ammo Box",
     "5.45": "5.45x39 Ammo Box",
     "7.62x39": "7.62x39 Ammo Box",
@@ -178,6 +179,10 @@ ALIASES = {
     "shotgun ammo": "lower caliber ammo box",
     "low caliber": "lower caliber ammo box",
     "low ammo": "lower caliber ammo box",
+    ".380 ammo": "lower caliber ammo box",
+    ".380 acp ammo": "lower caliber ammo box",
+    ".380 acp": "lower caliber ammo box",
+    ".380acp": "lower caliber ammo box",
     "rifle ammo": "higher Ammo Box",
     "rifle ammo box": "higher Ammo Box",
     "high caliber ammo": "higher Ammo Box",
