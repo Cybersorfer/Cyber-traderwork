@@ -138,7 +138,7 @@ ALIASES = {
     "M79": "M79 Grenade Launcher",
     "Savanna": "CR-550 Savanna",
     "CR-550 Savannah": "CR-550 Savanna",
-    "savanna": "CR-550 Savanna",
+    "savannah": "CR-550 Savanna",
     "vihker": "Vikhr",
     "KA-101": "KA101",
     "lar": "LAR",
@@ -724,3 +724,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
