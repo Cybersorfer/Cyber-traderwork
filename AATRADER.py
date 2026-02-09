@@ -117,6 +117,11 @@ ALIASES = {
     "bat": "All Melee Weapons",
     "fange": "All Melee Weapons",
     "sword": "All Melee Weapons",
+    "NVGs": "Night Vision Goggles",
+    "NVG": "Night Vision Goggles",
+    "Car Wheel": "Car Wheels",
+    "Wheels": "Car Wheels",
+    "Wheel": "Car Wheels",
 
     # Ammo / Guns Shortnames
     "M79": "M79 Grenade Launcher",
