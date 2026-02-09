@@ -137,6 +137,7 @@ ALIASES = {
     "M79": "M79 Grenade Launcher",
     "CR-550 Savannah": "CR-550 Savanna",
     "savanna": "CR-550 Savanna",
+    "vihker": "Vikhr",
     "KA-101": "KA101",
     "lar": "LAR",
     "m16": "M16-A2",     
