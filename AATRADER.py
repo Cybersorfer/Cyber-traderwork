@@ -34,7 +34,8 @@ GENERIC_PRICES = {
     "All other unlisted guns ($12,000)": 12000,
     "lower caliber ammo box ($2,000)": 2000,
     "higher Ammo Box ($4,000)": 4000,
-    "All Other Seed Packs ($1,000)": 1000
+    "All Other Seed Packs ($1,000)": 1000,
+    "FREE ($0)": 0
 }
 
 # --- TIMEZONE CONFIG (PST LOCK) ---
