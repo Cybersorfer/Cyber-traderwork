@@ -135,6 +135,7 @@ ALIASES = {
 
     # Ammo / Guns Shortnames
     "M79": "M79 Grenade Launcher",
+    "Savanna": "CR-550 Savanna",
     "CR-550 Savannah": "CR-550 Savanna",
     "savanna": "CR-550 Savanna",
     "vihker": "Vikhr",
