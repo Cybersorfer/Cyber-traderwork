@@ -170,6 +170,8 @@ ALIASES = {
     "5.45": "5.45x39 Ammo Box",
     "5,45": "5.45x39 Ammo Box",
     "5,45x39": "5.45x39 Ammo Box",
+    "5.45x39 mm": "5.45x39 Ammo Box",
+    "5.45x39mm": "5.45x39 Ammo Box",
     "7.62x39": "7.62x39 Ammo Box",
     "7.62x39mm": "7.62x39 Ammo Box",
     "7.62x39 mm": "7.62x39 Ammo Box",
