@@ -32,8 +32,8 @@ GENERIC_PRICES = {
     "All other unlisted mags ($3,000)": 3000,
     "All non-magnifying scopes ($3,000)": 3000,
     "All other unlisted guns ($12,000)": 12000,
-    "lower caliber ammo box": 2000,
-    "higher Ammo Box": 4000,
+    "lower caliber ammo box ($2,000)": 2000,
+    "higher Ammo Box ($4,000)": 4000,
     "All Other Seed Packs ($1,000)": 1000
 }
 
