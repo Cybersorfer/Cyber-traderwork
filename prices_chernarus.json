@@ -145,9 +145,11 @@
     "Blowtorch": 3000,
     "Tire Repair Kit": 3000,
     "Tire Iron/Wrench/Screwdriver/Pipe Wrench": 1000,
-    "Jerry Can, Full": 2000
+    "Jerry Can, Full": 2000,
+    "FREE": 0
   }
 }
+
 
 
 
