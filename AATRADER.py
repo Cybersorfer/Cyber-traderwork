@@ -160,7 +160,7 @@ ALIASES = {
     
     # Caliber Mapping 
     ".22": ".22 LR Ammo Box",
-    ".22r": ".22 LR Ammo Box",
+    ".22lr": ".22 LR Ammo Box",
     "5.56": "5.56x45 Ammo Box",
     "5.45": "5.45x39 Ammo Box",
     "7.62x39": "7.62x39 Ammo Box",
