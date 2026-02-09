@@ -127,7 +127,10 @@ ALIASES = {
     "Pick axe": "Pickaxe",
     "Pack axe": "Pickaxe",
     "sharpening stone": "Whetstone",
-    "sharping  stone": "Whetstone",
+    "sharping stone": "Whetstone",
+    "Field Bag": "Field Backpack",
+    "Field pack": "Field Backpack",
+    "Field sack": "Field Backpack",
 
     # Ammo / Guns Shortnames
     "M79": "M79 Grenade Launcher",
