@@ -69,7 +69,7 @@ ALIASES = {
     "30th anniversary tshirt": "10th Anniversary Tshirt",
     "weed crate full": "wooden crate full of weed", 
     "crate of weed": "wooden crate full of weed",
-    "crate full of weed": "wooden crate full of weed
+    "crate full of weed": "wooden crate full of weed",
     "Packs of Smokes": "Cigarettes",
     "Smokes": "Cigarettes", 
     "cigarette pack": "Cigarettes",
