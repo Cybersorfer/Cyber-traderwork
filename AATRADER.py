@@ -47,14 +47,10 @@ def get_pst_today():
     return get_pst_now().date()
 
 # --- ALIAS LIST ---
-# We map "Item of the week" to a specific PLACEHOLDER so we can swap it dynamically later.
 ALIASES = {
-    # SPECIAL PROMO MAPPING
     "item of the week": "🔥🔥PROMO_ITEM🔥🔥", 
     "item of week": "🔥🔥PROMO_ITEM🔥🔥",
     "promo item": "🔥🔥PROMO_ITEM🔥🔥",
-
-    # Typos & Short Names
     "prn": "Pen", 
     "ptn": "Pen",
     "pm": "Pen",
@@ -156,8 +152,6 @@ ALIASES = {
     "Scarred moto Helmet": "Yellow Scarred Moto Helmet",  
     "Scarred Helmet": "Yellow Scarred Moto Helmet",
     "King helmet": "Yellow Scarred Moto Helmet", 
- 
-    # Ammo / Guns Shortnames
     "M79": "M79 Grenade Launcher",
     "Savanna": "CR-550 Savanna",
     "CR-550 Savannah": "CR-550 Savanna",
@@ -184,8 +178,6 @@ ALIASES = {
     "blue locker": "Locker",
     "pistol": "All other unlisted guns",
     "rifle": "All other unlisted guns",
-    
-    # Caliber Mapping 
     ".22": ".22 LR Ammo Box",
     ".22lr": ".22 LR Ammo Box",
     "5.56": "5.56x45 Ammo Box",
@@ -232,8 +224,6 @@ ALIASES = {
     "high caliber": "higher Ammo Box",
     "higher caliber ammo": "higher Ammo Box",
     "high ammo": "higher Ammo Box",
-
-    # --- SCOPES ---
     "4x32 scopes": "All magnifying scopes",
     "4x32 scope": "All magnifying scopes",
     "hunting scope": "All magnifying scopes",
@@ -246,8 +236,6 @@ ALIASES = {
     "m68": "All non-magnifying scopes",
     "red dot": "All non-magnifying scopes",
     "collimator": "All non-magnifying scopes",
-    
-    # Construction / Tents
     "large tents": "Large Tent",
     "medium tent": "Medium Tent",
     "canopy tent": "Canopy Tent",
@@ -302,17 +290,6 @@ def set_theme():
         tbody tr:hover { background-color: #1E1E1E !important; }
         td { color: #E0E0E0 !important; }
         [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #4CAF50 !important; }
-        
-        /* Missing Item Box */
-        .missing-row {
-            background-color: #331111;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 5px;
-            border-left: 5px solid #FF4444;
-            display: flex;
-            align-items: center;
-        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -336,7 +313,6 @@ def save_all_promos(data):
     with open(PROMO_FILE, 'w') as f: json.dump(data, f)
 
 # --- SMART PARSING LOGIC ---
-
 def simple_pluralize(word):
     word = word.lower().strip()
     if word.endswith('s'): return word 
@@ -347,220 +323,134 @@ def simple_pluralize(word):
 @st.cache_data
 def build_search_index(price_dict, aliases):
     index = {}
-    
-    # 1. Add Manual Aliases
     for alias, real_name in aliases.items():
         clean_alias = alias.lower()
         index[clean_alias] = real_name
         index[simple_pluralize(clean_alias)] = real_name
-
-    # 2. Add Database Items
     for real_name in price_dict.keys():
         clean_name = str(real_name).lower()
-        
-        # Add exact name
         index[clean_name] = real_name
-        # Add plural version
         index[simple_pluralize(clean_name)] = real_name
-        
-        # Add version without parentheses
         no_variant = re.sub(r'\(.*?\)', '', clean_name).strip()
         if no_variant:
             index[no_variant] = real_name
             index[simple_pluralize(no_variant)] = real_name
-
     return index
 
 def clean_line_noise(line):
-    """
-    Cleans up common filler words, standardizes separators, and removes :
-    """
-    # FIX: Remove Colon that was causing errors
     line = line.replace(":", " ")
-
-    # Replace connectors with comma
     line = re.sub(r'\s+and\s+', ',', line, flags=re.IGNORECASE)
     line = re.sub(r'&', ',', line)
-    
-    # Remove filler words
     noise_words = ["box of", "boxes of", "box with", "pack of", "packs of", "can of", "cans of", " with "]
     for noise in noise_words:
         line = line.replace(noise, " ")
-    
     return line
 
 def extract_from_chunk(text, search_index):
-    """
-    Uses Manual Boundary Check to safely find items.
-    """
     text_lower = text.lower()
-    
-    # 1. Sort keys by length (descending)
     sorted_keys = sorted(search_index.keys(), key=len, reverse=True)
-    
     found_item_key = None
     real_name_result = None
     
-    # 2. SCAN FOR ITEM NAME (MANUAL CHECK)
     for key in sorted_keys:
         start_idx = text_lower.find(key)
-        
         if start_idx != -1:
             end_idx = start_idx + len(key)
-            
-            # Check Boundary Before
             valid_start = True
             if start_idx > 0:
                 char_before = text_lower[start_idx - 1]
-                # If char before is a letter, it's a partial match (bad).
-                # Exception: 'x' is allowed (e.g. 10xItem)
                 if char_before.isalpha() and char_before != 'x':
                     valid_start = False
-            
-            # Check Boundary After
             valid_end = True
             if end_idx < len(text_lower):
                 char_after = text_lower[end_idx]
-                # If char after is a letter, it's a partial match (bad).
-                # Exception: 'x' is allowed (e.g. Itemx10)
                 if char_after.isalpha() and char_after != 'x':
                     valid_end = False
-            
             if valid_start and valid_end:
                 found_item_key = key
                 real_name_result = search_index[key]
                 break
             
     if found_item_key:
-        # 3. REMOVE ITEM FROM TEXT TO ISOLATE QUANTITY
         text_without_item = text_lower.replace(found_item_key, " ", 1)
-        
-        # 4. FIND QUANTITY IN REMAINDER
-        # Look for "x 5", "5 x", "5"
         qty_match = re.search(r'[xX]\s*(\d+)|(\d+)\s*[xX]|(\d+)', text_without_item)
-        
         if qty_match:
-            # Grab the first non-None group
             q_str = next((g for g in qty_match.groups() if g is not None), "1")
             quantity = int(q_str)
         else:
             quantity = 1
-            
         return real_name_result, quantity, True
-        
     else:
-        # Fallback: Just look for a number
         qty_match = re.search(r'(\d+)', text)
         quantity = int(qty_match.group(1)) if qty_match else 1
         return text, quantity, False
 
 def check_mode_switch(line):
     line_lower = line.lower()
-    
-    # --- COST / USER BUYING ---
-    buy_keywords = [
-        "want to buy", "buying", "wtb", "want to order", "ordering", "need", 
-        "would like to buy", "would like to order", "like to buy", "looking to buy",
-        "buy", "buying", "going to grab", "grab", "picking up"
-    ]
+    buy_keywords = ["want to buy", "buying", "wtb", "want to order", "ordering", "need", "buy", "grab"]
     for kw in buy_keywords:
-        # Ensure we match whole words if possible, or simple contains
         if kw in line_lower: return "COST", kw
-        
-    # --- PAYOUT / USER SELLING ---
-    sell_keywords = [
-        "want to sell", "selling", "wts", "i have", "have", "would like to sell",
-        "like to sell", "looking to sell", "sell", "selling"
-    ]
+    sell_keywords = ["want to sell", "selling", "wts", "i have", "have", "sell"]
     for kw in sell_keywords:
         if kw in line_lower: return "PAYOUT", kw
-        
     return None, None
 
 def is_ignored_line(line):
-    # Lines that should be skipped entirely
     ignore_starts = ["hello", "hi ", "dropping off", "code", "locker code", "blue locker"]
     line_clean = line.lower().strip()
     return any(line_clean.startswith(x) for x in ignore_starts)
 
+# --- UPDATED PROCESSING LOGIC ---
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
-    # 1. Prepare Index
     combined_keys = {**price_dict_buy, **price_dict_sell} 
     search_index = build_search_index(combined_keys, ALIASES)
 
     raw_lines = input_text.split('\n')
-    new_payout_items = []   # We Buy
-    new_cost_items = []     # We Sell (Trader Sells)
+    new_payout_items = []
+    new_cost_items = []
     new_missing_items = []
     
-    current_mode = "PAYOUT" 
+    current_mode = "PAYOUT" # Default starts as selling
     
     for raw_line in raw_lines:
         if not raw_line.strip(): continue
         if is_ignored_line(raw_line): continue
         
-        # Check for Mode Switching
         new_mode, keyword = check_mode_switch(raw_line)
         if new_mode:
             current_mode = new_mode
-            line_content = re.sub(keyword, "", raw_line, flags=re.IGNORECASE)
+            line_content = re.sub(re.escape(keyword), "", raw_line, flags=re.IGNORECASE)
         else:
             line_content = raw_line
 
-        # --- PRE-PROCESS LINE ---
         line_content = clean_line_noise(line_content)
-
-        # Split by comma
         comma_parts = line_content.split(',')
         
         for part in comma_parts:
             part = part.strip()
             if not part: continue
             
-            # --- EXTRACT ---
             item_name, qty, found = extract_from_chunk(part, search_index)
-            
-            # Determine Price & Source
             price = 0
+            
             if found:
-                # 1. PROMO LOGIC: Check for specific "Item of the Week" Alias
                 if item_name == "🔥🔥PROMO_ITEM🔥🔥":
                     if promo_info.get("active"):
                          price = promo_info.get("price")
                          item_name = f"🔥 {promo_info.get('name')}"
-                    else:
-                        # If promo isn't active, treat as error or generic
-                        item_name = "Item of the Week (No Active Promo)"
-                        price = 0
-
-                # 2. PROMO LOGIC: Check if detected item matches the promo name
                 elif promo_info.get("active") and promo_info.get("name").lower() in item_name.lower():
                      price = promo_info.get("price")
                      item_name = f"🔥 {promo_info.get('name')}"
-                
                 else:
-                    # Look up price in standard DB
+                    # STRICT MODE LOOKUP: Use specific dict based on "buy/sell" keywords
                     if current_mode == "COST":
                         price = price_dict_sell.get(item_name, 0)
                     else:
                         price = price_dict_buy.get(item_name, 0)
-                    
-                    # Cross-check other list if 0
-                    if price == 0:
-                        if current_mode == "COST":
-                            alt_price = price_dict_buy.get(item_name, 0)
-                        else:
-                            alt_price = price_dict_sell.get(item_name, 0)
-                        if alt_price > 0: price = alt_price
 
-            # Construct Result
             entry = {
-                "Item": item_name,
-                "Qty": qty,
-                "Unit Price": price,
-                "Total": qty * price,
-                "Found": found,
-                "Type": current_mode
+                "Item": item_name, "Qty": qty, "Unit Price": price,
+                "Total": qty * price, "Found": found, "Type": current_mode
             }
 
             if found and price > 0:
@@ -574,85 +464,52 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     return new_payout_items, new_cost_items, new_missing_items
 
 def render_result_tables():
-    # --- CALCULATE MANUAL RESOLUTIONS ---
     resolved_payout = 0
     resolved_cost = 0
 
     if 'missing_df' in st.session_state and not st.session_state.missing_df.empty:
         st.warning("⚠️ **Items Not Found - Manual Resolution Needed:**")
-        st.markdown("Select a category for each missing item to add it to the total.")
-        
         m_df = st.session_state.missing_df
-        
-        # Iterate through missing items
         for index, row in m_df.iterrows():
             c1, c2, c3 = st.columns([3, 1, 3])
-            with c1:
-                st.write(f"❌ **{row['Item']}** (x{row['Qty']})")
-            with c2:
-                st.caption(f"Type: {row['Type']}")
+            with c1: st.write(f"❌ **{row['Item']}** (x{row['Qty']})")
+            with c2: st.caption(f"Type: {row['Type']}")
             with c3:
-                cat_key = f"cat_{index}_{row['Item']}"
-                selected_cat = st.selectbox(
-                    "Assign Category:", 
-                    options=GENERIC_PRICES.keys(), 
-                    key=cat_key,
-                    label_visibility="collapsed"
-                )
-                
+                selected_cat = st.selectbox("Assign Category:", options=GENERIC_PRICES.keys(), key=f"cat_{index}_{row['Item']}", label_visibility="collapsed")
                 price = GENERIC_PRICES[selected_cat]
                 line_total = price * row['Qty']
-                
                 if line_total > 0:
-                    if row['Type'] == "PAYOUT":
-                        resolved_payout += line_total
-                    else:
-                        resolved_cost += line_total
+                    if row['Type'] == "PAYOUT": resolved_payout += line_total
+                    else: resolved_cost += line_total
                     st.success(f"+ ${line_total:,}")
-        
         st.markdown("---")
 
-    # --- PAYOUT SECTION ---
     st.subheader("💰 Payout (We Buy)")
     payout_db_total = 0
     if 'buy_df' in st.session_state and not st.session_state.buy_df.empty:
         df = st.session_state.buy_df
-        if "Item" in df.columns:
-            fmt_df = df.copy()
-            fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
-            fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
-            st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
-            payout_db_total = df['Total'].sum()
-    else:
-        st.info("No Payout items found in database.")
-
+        fmt_df = df.copy()
+        fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
+        fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
+        st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
+        payout_db_total = df['Total'].sum()
+    
     final_payout = payout_db_total + resolved_payout
-    if resolved_payout > 0:
-        st.success(f"### Total: ${payout_db_total:,} (DB) + ${resolved_payout:,} (Resolved) = ${final_payout:,}")
-    else:
-        st.success(f"### Total Payout: ${final_payout:,}")
-
+    st.success(f"### Total Payout: ${final_payout:,}")
     st.markdown("---")
 
-    # --- COST SECTION ---
     st.subheader("🛒 Cost (We Sell)")
     cost_db_total = 0
     if 'sell_df' in st.session_state and not st.session_state.sell_df.empty:
         df = st.session_state.sell_df
-        if "Item" in df.columns:
-            fmt_df = df.copy()
-            fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
-            fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
-            st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
-            cost_db_total = df['Total'].sum()
-    else:
-        st.info("No Cost items found in database.")
+        fmt_df = df.copy()
+        fmt_df["Unit Price"] = fmt_df["Unit Price"].apply(lambda x: f"{x:,}")
+        fmt_df["Total"] = fmt_df["Total"].apply(lambda x: f"{x:,}")
+        st.table(fmt_df[["Item", "Qty", "Unit Price", "Total"]])
+        cost_db_total = df['Total'].sum()
 
     final_cost = cost_db_total + resolved_cost
-    if resolved_cost > 0:
-        st.error(f"### Total: ${cost_db_total:,} (DB) + ${resolved_cost:,} (Resolved) = ${final_cost:,}")
-    else:
-        st.error(f"### Total Due: ${final_cost:,}")
+    st.error(f"### Total Due: ${final_cost:,}")
 
 def clear_state():
     st.session_state.buy_df = pd.DataFrame()
@@ -662,55 +519,23 @@ def clear_state():
 
 def main():
     set_theme()
-    
     st.sidebar.title("🌍 Map Selector")
     selected_map = st.sidebar.selectbox("Select Server Map:", list(MAPS.keys()))
     st.title(f"⚖️ {selected_map} Economy Suite")
     
     all_promos = load_all_promos()
     map_promo = all_promos.get(selected_map, {})
-    
     st.sidebar.header(f"🔥 {selected_map} Item of Week")
-    
     special_item_active = st.sidebar.checkbox("Enable Special Price", value=map_promo.get("active", False))
-    special_name = st.sidebar.text_input("Item Name (e.g. Gas Stove)", value=map_promo.get("name", ""))
+    special_name = st.sidebar.text_input("Item Name", value=map_promo.get("name", ""))
     special_price_val = st.sidebar.text_input("Special Price", value=str(map_promo.get("price", 0)))
-    
-    saved_date_str = map_promo.get("expiry", str(get_pst_today()))
-    try: default_date = date.fromisoformat(saved_date_str)
-    except: default_date = get_pst_today()
-        
-    expiry_date = st.sidebar.date_input("Offer Ends On", value=default_date, min_value=get_pst_today())
-    
     try: special_price = int(special_price_val)
     except: special_price = 0
-
-    pst_time_str = get_pst_now().strftime("%I:%M %p")
-    st.sidebar.markdown(f"""
-        <div style="margin-bottom: 10px; margin-top: 10px;">
-            <b style="color: #B0B0B0; font-size: 1rem;">🕒 Server Time(PST):</b> 
-            <br>
-            <span style="color: #00FF00; font-size: 1.2rem; font-weight: bold;">{pst_time_str}</span>
-        </div>
-        """, unsafe_allow_html=True)
     
     if st.sidebar.button("🔄 Update Promo"):
-        all_promos[selected_map] = {
-            "active": special_item_active,
-            "name": special_name,
-            "price": special_price,
-            "expiry": str(expiry_date)
-        }
+        all_promos[selected_map] = {"active": special_item_active, "name": special_name, "price": special_price, "expiry": str(get_pst_today())}
         save_all_promos(all_promos)
-        st.success(f"Promo for {selected_map} Saved!")
-        st.rerun()
-
-    promo_info_package = {
-        "active": special_item_active,
-        "name": special_name,
-        "price": special_price,
-        "expiry_date": expiry_date
-    }
+        st.success("Promo Saved!")
 
     data = load_prices(selected_map)
     WE_BUY = data.get("WE_BUY", {})
@@ -721,30 +546,16 @@ def main():
     if 'missing_df' not in st.session_state: st.session_state.missing_df = pd.DataFrame()
 
     st.markdown("### 📜 Smart Trade Processor")
-    st.markdown(f"Paste your **{selected_map} ticket** here. The AI will sort buys vs sells automatically.")
-    
     input_text = st.text_area("Paste Chat Log / Ticket:", height=200, key="master_input")
     
     if st.button("🚀 Process Ticket"):
-        payouts, costs, missing = process_text_block(input_text, WE_BUY, WE_SELL, promo_info_package)
+        payouts, costs, missing = process_text_block(input_text, WE_BUY, WE_SELL, {"active": special_item_active, "name": special_name, "price": special_price})
         st.session_state.buy_df = pd.DataFrame(payouts) if payouts else pd.DataFrame()
         st.session_state.sell_df = pd.DataFrame(costs) if costs else pd.DataFrame()
         st.session_state.missing_df = pd.DataFrame(missing) if missing else pd.DataFrame()
 
     render_result_tables()
-    
-    with st.expander("🕵️ Debug: Search Price Database"):
-        st.write(f"Searching database for: **{selected_map}**")
-        search_q = st.text_input("Search Item Name")
-        if search_q:
-            hits_buy = [k for k in WE_BUY.keys() if search_q.lower() in str(k).lower()]
-            hits_sell = [k for k in WE_SELL.keys() if search_q.lower() in str(k).lower()]
-            if hits_buy: st.write(f"**Found in WE BUY:** {hits_buy}")
-            if hits_sell: st.write(f"**Found in TRADER SELLS:** {hits_sell}")
-            if not hits_buy and not hits_sell: st.warning("Not found in either list.")
-
     st.button("🗑️ Clear All", on_click=clear_state)
 
 if __name__ == "__main__":
     main()
-
