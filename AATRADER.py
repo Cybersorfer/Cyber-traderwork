@@ -143,7 +143,10 @@ ALIASES = {
     "Field Bag": "Field Backpack",
     "Field pack": "Field Backpack",
     "Field sack": "Field Backpack",
-
+    "Yellow Scarred Helmet": "Yellow Scarred Moto Helmet",  
+    "Scarred Helmet": "Yellow Scarred Moto Helmet",
+    "King helmet": "Yellow Scarred Moto Helmet", 
+ 
     # Ammo / Guns Shortnames
     "M79": "M79 Grenade Launcher",
     "Savanna": "CR-550 Savanna",
