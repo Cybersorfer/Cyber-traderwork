@@ -164,6 +164,12 @@ def clean_line_noise(line):
     for noise in noise_words: line = line.replace(noise, " ")
     return line
 
+def clear_state():
+    st.session_state.buy_df = pd.DataFrame()
+    st.session_state.sell_df = pd.DataFrame()
+    st.session_state.missing_df = pd.DataFrame()
+    st.session_state.master_input = ""
+
 # --- PROCESSING ---
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     search_index = build_search_index({**price_dict_buy, **price_dict_sell}, ALIASES)
@@ -178,9 +184,19 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             line = re.sub(re.escape(kw), "", line, flags=re.IGNORECASE)
 
         line = clean_line_noise(line)
+        
+        # Split by comma
         for part in line.split(','):
-            item_name, qty, found = extract_from_chunk(part.strip(), search_index)
+            part = part.strip()
+            # FIX: Skip empty parts (prevents ghost rows)
+            if not part: continue
+            
+            item_name, qty, found = extract_from_chunk(part, search_index)
             price = 0
+            
+            # Additional safety: If item name ended up empty
+            if not str(item_name).strip(): continue
+
             if found:
                 if item_name == "🔥🔥PROMO_ITEM🔥🔥" or (promo_info.get('active') and promo_info.get('name', '').lower() in item_name.lower()):
                     price = promo_info.get('price', 0)
@@ -256,7 +272,7 @@ def main():
     WE_BUY, WE_SELL = data.get("WE_BUY", {}), data.get("TRADER_SELLS", {})
 
     st.title(f"⚖️ {selected_map} Economy Suite")
-    input_text = st.text_area("Paste Ticket Here:", height=200)
+    input_text = st.text_area("Paste Ticket Here:", height=200, key="master_input")
     
     if 'buy_df' not in st.session_state: st.session_state.buy_df = pd.DataFrame()
     if 'sell_df' not in st.session_state: st.session_state.sell_df = pd.DataFrame()
@@ -266,6 +282,44 @@ def main():
         p, c, m = process_text_block(input_text, WE_BUY, WE_SELL, all_promos[selected_map])
         st.session_state.buy_df, st.session_state.sell_df, st.session_state.missing_df = pd.DataFrame(p), pd.DataFrame(c), pd.DataFrame(m)
 
+    # --- CALCULATE MANUAL RESOLUTIONS ---
+    resolved_payout = 0
+    resolved_cost = 0
+
+    # Display Missing Items with Manual Category Selector
+    if not st.session_state.missing_df.empty:
+        st.warning("⚠️ **Items Not Found - Manual Resolution Needed:**")
+        
+        m_df = st.session_state.missing_df
+        # Double check to filter out empty rows just in case
+        m_df = m_df[m_df["Item"].str.strip().astype(bool)]
+        
+        for index, row in m_df.iterrows():
+            c1, c2, c3 = st.columns([3, 1, 3])
+            with c1:
+                st.write(f"❌ **{row['Item']}** (x{row['Qty']})")
+            with c2:
+                st.caption(f"Type: {row['Type']}")
+            with c3:
+                cat_key = f"cat_{index}_{row['Item']}"
+                selected_cat = st.selectbox(
+                    "Assign Category:", 
+                    options=GENERIC_PRICES.keys(), 
+                    key=cat_key,
+                    label_visibility="collapsed"
+                )
+                
+                price = GENERIC_PRICES[selected_cat]
+                line_total = price * row['Qty']
+                
+                if line_total > 0:
+                    if row['Type'] == "PAYOUT":
+                        resolved_payout += line_total
+                    else:
+                        resolved_cost += line_total
+                    st.success(f"+ ${line_total:,}")
+        st.markdown("---")
+
     # Tables
     if not st.session_state.buy_df.empty:
         st.subheader("💰 Payout (We Buy)")
@@ -273,7 +327,12 @@ def main():
         df["Unit Price"] = df["Unit Price"].apply(lambda x: f"{x:,}")
         df["Total"] = df["Total"].apply(lambda x: f"{x:,}")
         st.table(df)
-        st.success(f"### Total Payout: ${st.session_state.buy_df['Total'].sum():,}")
+        
+        final_payout = st.session_state.buy_df['Total'].sum() + resolved_payout
+        if resolved_payout > 0:
+            st.success(f"### Total: ${st.session_state.buy_df['Total'].sum():,} (DB) + ${resolved_payout:,} (Resolved) = ${final_payout:,}")
+        else:
+            st.success(f"### Total Payout: ${final_payout:,}")
 
     if not st.session_state.sell_df.empty:
         st.subheader("🛒 Cost (We Sell)")
@@ -281,11 +340,12 @@ def main():
         df["Unit Price"] = df["Unit Price"].apply(lambda x: f"{x:,}")
         df["Total"] = df["Total"].apply(lambda x: f"{x:,}")
         st.table(df)
-        st.error(f"### Total Due: ${st.session_state.sell_df['Total'].sum():,}")
         
-    if not st.session_state.missing_df.empty:
-        st.warning("⚠️ Items Not Found")
-        st.table(st.session_state.missing_df)
+        final_cost = st.session_state.sell_df['Total'].sum() + resolved_cost
+        if resolved_cost > 0:
+            st.error(f"### Total: ${st.session_state.sell_df['Total'].sum():,} (DB) + ${resolved_cost:,} (Resolved) = ${final_cost:,}")
+        else:
+            st.error(f"### Total Due: ${final_cost:,}")
 
     # --- CLEAN PRICE SEARCH ---
     with st.expander("🕵️ Search Price Database"):
@@ -306,6 +366,8 @@ def main():
 
             if not hits_buy and not hits_sell:
                 st.warning("No items found matching your search.")
+
+    st.button("🗑️ Clear All", on_click=clear_state)
 
 if __name__ == "__main__":
     main()
