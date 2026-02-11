@@ -62,6 +62,7 @@ ALIASES = {
     "zagorty": "Zagorky",
     "zagorky snacks": "Zagorky",
     "unknown food": "Unknown Food Can",
+    "unknown can": "Unknown Food Can",
     "sharpening stone": "Whetstone",
     "sharpening stones": "Whetstone",
     "anniversary tshirt": "10th Anniversary Tshirt",
