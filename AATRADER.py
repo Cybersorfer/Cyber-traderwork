@@ -144,6 +144,7 @@ ALIASES = {
     "Field pack": "Field Backpack",
     "Field sack": "Field Backpack",
     "Yellow Scarred Helmet": "Yellow Scarred Moto Helmet",  
+    "Scarred moto Helmet": "Yellow Scarred Moto Helmet",  
     "Scarred Helmet": "Yellow Scarred Moto Helmet",
     "King helmet": "Yellow Scarred Moto Helmet", 
  
