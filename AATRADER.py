@@ -76,6 +76,8 @@ ALIASES = {
     "sea chest full of weed": "seachest full of weed(100 dried buds)",    
     "weed seachest full": "seachest full of weed(100 dried buds)",
     "weed seachest": "seachest full of weed(100 dried buds)",
+    "weed sea chest full": "seachest full of weed(100 dried buds)",
+    "weed sea chest": "seachest full of weed(100 dried buds)",
     "Packs of Smokes": "Cigarettes",
     "Smokes": "Cigarettes", 
     "cigarette pack": "Cigarettes",
