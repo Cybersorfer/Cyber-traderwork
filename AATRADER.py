@@ -17,7 +17,7 @@ MAPS = {
 }
 PROMO_FILE = 'promo.json'
 
-# --- GENERIC CATEGORIES ---
+# --- GENERIC CATEGORIES (Fallback Prices) ---
 GENERIC_PRICES = {
     "Select Category...": 0,
     "All Other Bags/sacks ($3,000)": 3000,
@@ -37,7 +37,7 @@ GENERIC_PRICES = {
     "FREE ($0)": 0
 }
 
-# --- ALIASES ---
+# --- ALIAS LIST ---
 ALIASES = {
     "item of the week": "🔥🔥PROMO_ITEM🔥🔥", 
     "item of week": "🔥🔥PROMO_ITEM🔥🔥",
@@ -48,7 +48,8 @@ ALIASES = {
     "sharpening stone": "Whetstone", "sharpening stones": "Whetstone",
     "weed crate full": "wooden crate full of weed(50 dried buds)", 
     "seachest full of weed": "seachest full of weed(100 dried buds)",
-    "Packs of Smokes": "Cigarettes", "Smokes": "Cigarettes", "cig": "Cigarettes",
+    "Packs of Smokes": "Cigarettes", "Smokes": "Cigarettes", 
+    "cigs pack": "Cigarettes", "cig": "Cigarettes",
     "POX": "POX Antidote", "Antidote": "POX Antidote",
     "Medical Pouch": "First Aid Pouch", "Aid Pouch": "First Aid Pouch",
     "Cannabis Seeds": "Cannabis Seed Pack", "Weed Seeds": "Cannabis Seed Pack",
@@ -141,6 +142,28 @@ def check_mode_switch(line):
     if any(kw in line_lower for kw in ["selling", "wts", "have", "sell"]): return "PAYOUT", "sell"
     return None, None
 
+def load_prices(map_name):
+    file_path = MAPS.get(map_name, "prices_chernarus.json")
+    try:
+        with open(file_path, 'r') as f: return json.load(f)
+    except: return {"WE_BUY": {}, "TRADER_SELLS": {}}
+
+def load_all_promos():
+    if os.path.exists(PROMO_FILE):
+        try:
+            with open(PROMO_FILE, 'r') as f: return json.load(f)
+        except: pass
+    return {}
+
+def save_all_promos(data):
+    with open(PROMO_FILE, 'w') as f: json.dump(data, f)
+
+def clean_line_noise(line):
+    line = line.replace(":", " ")
+    noise_words = ["box of", "boxes of", "pack of", "can of", " with "]
+    for noise in noise_words: line = line.replace(noise, " ")
+    return line
+
 # --- PROCESSING ---
 def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     search_index = build_search_index({**price_dict_buy, **price_dict_sell}, ALIASES)
@@ -154,7 +177,8 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             current_mode = new_mode
             line = re.sub(re.escape(kw), "", line, flags=re.IGNORECASE)
 
-        for part in line.replace(":", " ").split(','):
+        line = clean_line_noise(line)
+        for part in line.split(','):
             item_name, qty, found = extract_from_chunk(part.strip(), search_index)
             price = 0
             if found:
@@ -162,7 +186,7 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
                     price = promo_info.get('price', 0)
                     item_name = f"🔥 {promo_info.get('name', item_name)}"
                 else:
-                    # Case-insensitive lookup in the correct dictionary
+                    # Strict Mode Lookup
                     target_dict = price_dict_sell if current_mode == "COST" else price_dict_buy
                     price = get_price_case_insensitive(item_name, target_dict)
 
@@ -172,8 +196,38 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
             else: missing.append(entry)
     return payouts, costs, missing
 
+# --- CUSTOM CSS ---
+def set_theme():
+    st.markdown("""
+    <style>
+        .stApp { background-color: #0E1117; color: #E0E0E0; }
+        section[data-testid="stSidebar"] { background-color: #262730; }
+        section[data-testid="stSidebar"] * { color: #FAFAFA !important; }
+        .stTextArea label, .stTextInput label, .stNumberInput label, .stDateInput label, .stCheckbox label, .stSelectbox label {
+            color: #B0B0B0 !important; font-size: 1rem; font-weight: bold;
+        }
+        .stTextArea textarea, .stTextInput input, .stNumberInput input {
+            background-color: #1E1E1E !important; 
+            color: #00FF00 !important;
+            border: 1px solid #4CAF50; 
+            caret-color: #00FF00;
+        }
+        div[data-baseweb="input"] { background-color: #1E1E1E !important; border-color: #4CAF50 !important; }
+        div[data-baseweb="select"] > div { background-color: #1E1E1E !important; color: #00FF00 !important; border-color: #4CAF50 !important; }
+        .stButton>button { color: #FAFAFA; background-color: #262730; border: 1px solid #4CAF50; transition: all 0.3s ease; }
+        .stButton>button:hover { background-color: #4CAF50; color: #000000; box-shadow: 0 0 10px #4CAF50; }
+        table { color: #E0E0E0 !important; background-color: transparent !important; border-collapse: collapse; width: 100%; }
+        thead tr th { background-color: #262730 !important; color: #00FF00 !important; border-bottom: 2px solid #4CAF50 !important; }
+        tbody tr { border-bottom: 1px solid #333 !important; }
+        tbody tr:hover { background-color: #1E1E1E !important; }
+        td { color: #E0E0E0 !important; }
+        [data-testid="stMetricValue"], [data-testid="stMetricLabel"] { color: #4CAF50 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- UI ---
 def main():
+    set_theme()
     st.sidebar.title("🌍 Map Selector")
     selected_map = st.sidebar.selectbox("Select Server Map:", list(MAPS.keys()))
     
@@ -204,25 +258,54 @@ def main():
     st.title(f"⚖️ {selected_map} Economy Suite")
     input_text = st.text_area("Paste Ticket Here:", height=200)
     
+    if 'buy_df' not in st.session_state: st.session_state.buy_df = pd.DataFrame()
+    if 'sell_df' not in st.session_state: st.session_state.sell_df = pd.DataFrame()
+    if 'missing_df' not in st.session_state: st.session_state.missing_df = pd.DataFrame()
+
     if st.button("🚀 Process Ticket"):
         p, c, m = process_text_block(input_text, WE_BUY, WE_SELL, all_promos[selected_map])
         st.session_state.buy_df, st.session_state.sell_df, st.session_state.missing_df = pd.DataFrame(p), pd.DataFrame(c), pd.DataFrame(m)
 
     # Tables
-    if 'buy_df' in st.session_state:
+    if not st.session_state.buy_df.empty:
         st.subheader("💰 Payout (We Buy)")
-        if not st.session_state.buy_df.empty: st.table(st.session_state.buy_df)
+        df = st.session_state.buy_df.copy()
+        df["Unit Price"] = df["Unit Price"].apply(lambda x: f"{x:,}")
+        df["Total"] = df["Total"].apply(lambda x: f"{x:,}")
+        st.table(df)
+        st.success(f"### Total Payout: ${st.session_state.buy_df['Total'].sum():,}")
+
+    if not st.session_state.sell_df.empty:
         st.subheader("🛒 Cost (We Sell)")
-        if not st.session_state.sell_df.empty: st.table(st.session_state.sell_df)
+        df = st.session_state.sell_df.copy()
+        df["Unit Price"] = df["Unit Price"].apply(lambda x: f"{x:,}")
+        df["Total"] = df["Total"].apply(lambda x: f"{x:,}")
+        st.table(df)
+        st.error(f"### Total Due: ${st.session_state.sell_df['Total'].sum():,}")
         
-    # Restored Price Search
+    if not st.session_state.missing_df.empty:
+        st.warning("⚠️ Items Not Found")
+        st.table(st.session_state.missing_df)
+
+    # --- CLEAN PRICE SEARCH ---
     with st.expander("🕵️ Search Price Database"):
         q = st.text_input("Search Item Name").lower()
         if q:
-            hb = {k: f"${v:,}" for k, v in WE_BUY.items() if q in k.lower()}
-            hs = {k: f"${v:,}" for k, v in WE_SELL.items() if q in k.lower()}
-            if hb: st.write("**WE BUY:**", hb)
-            if hs: st.write("**TRADER SELLS:**", hs)
+            hits_buy = {k: v for k, v in WE_BUY.items() if q in str(k).lower()}
+            hits_sell = {k: v for k, v in WE_SELL.items() if q in str(k).lower()}
+            
+            if hits_buy:
+                st.markdown("### 💰 WE BUY:")
+                for name, price in hits_buy.items():
+                    st.write(f"**{name}**: ${price:,}")
+                    
+            if hits_sell:
+                st.markdown("### 🛒 TRADER SELLS:")
+                for name, price in hits_sell.items():
+                    st.write(f"**{name}**: ${price:,}")
+
+            if not hits_buy and not hits_sell:
+                st.warning("No items found matching your search.")
 
 if __name__ == "__main__":
     main()
