@@ -237,6 +237,7 @@ ALIASES = {
     "M3S Wheels": "Car Wheels",
     "M1025 Wheels": "Car Wheels",
     "Wheel": "Car Wheels",
+    "Sea chest": "Seachest",
 }
 
 # --- HELPERS ---
@@ -566,6 +567,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
