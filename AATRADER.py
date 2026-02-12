@@ -520,12 +520,12 @@ def main():
 
     # --- TIME DISPLAY ---
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🕒 Global Time")
+    st.sidebar.markdown("### 🕒 AAPVE SERVER TIME")
 
     # 3. SERVER TIME (PST) - Python Side
     pst_zone = pytz.timezone('US/Pacific')
     pst_now = datetime.now(pst_zone).strftime("%I:%M %p")
-    st.sidebar.metric("🇺🇸 Server Time (PST)", pst_now)
+    st.sidebar.metric("LA,CA Server Time (PST)", pst_now)
 
     # 4. LOCAL TIME (User) - Fixed Component
     # We use components.html to guarantee the Javascript runs
@@ -692,6 +692,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
