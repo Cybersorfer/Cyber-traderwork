@@ -1,3 +1,4 @@
+import streamlit.components.v1 as components
 import streamlit as st
 import re
 import json
@@ -526,24 +527,62 @@ def main():
     pst_now = datetime.now(pst_zone).strftime("%I:%M %p")
     st.sidebar.metric("🇺🇸 Server Time (PST)", pst_now)
 
-    # 4. LOCAL TIME (User) - JavaScript Side
-    # Python cannot see the user's browser time, so we inject a tiny JS clock.
-    st.sidebar.markdown("""
-    <div style="background-color: #1E1E1E; padding: 10px; border-radius: 5px; border: 1px solid #4CAF50; text-align: center;">
-        <p style="color: #B0B0B0; font-size: 0.8rem; margin-bottom: 5px; font-weight:bold;">🏠 Your Local Time</p>
-        <div id="local_clock" style="color: #4CAF50; font-size: 1.8rem; font-weight: bold; font-family: monospace;">--:--</div>
-    </div>
-    <script>
-    function updateClock() {
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        document.getElementById('local_clock').innerHTML = timeString;
-    }
-    // Update immediately and then every second
-    updateClock();
-    setInterval(updateClock, 1000);
-    </script>
-    """, unsafe_allow_html=True)
+    # 4. LOCAL TIME (User) - Fixed Component
+    # We use components.html to guarantee the Javascript runs
+    st.sidebar.markdown("🏠 **Your Local Time**")
+    
+    clock_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            /* Match the App Theme */
+            body {
+                background-color: #1E1E1E;
+                color: #B0B0B0;
+                font-family: "Source Sans Pro", sans-serif;
+                text-align: center;
+                margin: 0;
+                padding: 5px;
+                border: 1px solid #4CAF50;
+                border-radius: 5px;
+                box-sizing: border-box; 
+            }
+            #clock {
+                color: #4CAF50;
+                font-size: 28px; /* 1.8rem approx */
+                font-weight: bold;
+                font-family: monospace;
+                margin-top: 2px;
+            }
+            #label {
+                font-size: 12px;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="label">Browser Time</div>
+        <div id="clock">--:--</div>
+        <script>
+            function updateClock() {
+                const now = new Date();
+                // usage of 'undefined' uses the browser's default locale
+                const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                document.getElementById('clock').innerHTML = timeString;
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+        </script>
+    </body>
+    </html>
+    """
+    
+    # Render the HTML in the sidebar with a set height
+    with st.sidebar:
+        components.html(clock_html, height=85)
 
     # --- MAIN APP LOGIC ---
     # Load Prices
