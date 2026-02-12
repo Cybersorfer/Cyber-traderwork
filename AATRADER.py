@@ -51,7 +51,7 @@ ALIASES = {
     "santa hats": "Santa Hat",
     "santa beard": "Santa Beard",
 
-    # --- CLOTHING: General ---
+    # --- CLOTHING: General --- 
     "other tops": "All other tops",
     "tops": "All other tops",
     "shirt": "All other tops",
@@ -184,6 +184,7 @@ ALIASES = {
     "Aid Pouch": "First Aid Pouch",
     "zagorty": "Zagorky",
     "zagorky snacks": "Zagorky",
+    "snacks": "Zagorky",
     "unknown food": "Unknown Food Can",
     "unknown can": "Unknown Food Can",
 
