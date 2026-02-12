@@ -388,10 +388,14 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
     
     for line in input_text.split('\n'):
         if not line.strip(): continue
+        
+        # FIX: Ignore lines that are just totals (e.g. =$187,000)
+        if line.strip().startswith('='): continue
+
         new_mode, kw = check_mode_switch(line)
         if new_mode:
             current_mode = new_mode
-            # Remove the keyword that triggered the switch so it doesn't get processed
+            # Remove the SPECIFIC keyword found (e.g. "Selling") not just "sell"
             line = re.sub(re.escape(kw), "", line, flags=re.IGNORECASE)
 
         line = clean_line_noise(line)
@@ -399,7 +403,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
         # Split by comma
         for part in line.split(','):
             part = part.strip()
-            # FIX: Skip empty parts (prevents ghost rows)
             if not part: continue
             
             item_name, qty, found = extract_from_chunk(part, search_index)
@@ -413,7 +416,6 @@ def process_text_block(input_text, price_dict_buy, price_dict_sell, promo_info):
                     price = promo_info.get('price', 0)
                     item_name = f"🔥 {promo_info.get('name', item_name)}"
                 else:
-                    # Strict Mode Lookup
                     target_dict = price_dict_sell if current_mode == "COST" else price_dict_buy
                     price = get_price_case_insensitive(item_name, target_dict)
 
