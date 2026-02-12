@@ -314,8 +314,11 @@ def extract_from_chunk(text, search_index):
         quantity = int(next((g for g in qty_match.groups() if g is not None), "1")) if qty_match else 1
         return real_name_result, quantity, True
     else:
-        qty_match = re.search(r'(\d+)', text)
-        return text, int(qty_match.group(1)) if qty_match else 1, False
+        # FIX: For unknown items, only accept quantity if it has an 'x' (e.g. x10, 10x)
+        # This prevents "Code 0310" from being read as Quantity 310
+        qty_match = re.search(r'[xX]\s*(\d+)|(\d+)\s*[xX]', text)
+        quantity = int(next((g for g in qty_match.groups() if g is not None), "1")) if qty_match else 1
+        return text, quantity, False
 
 def check_mode_switch(line):
     line_lower = line.lower()
