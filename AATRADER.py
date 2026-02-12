@@ -58,8 +58,8 @@ ALIASES = {
     "knife":"All Melee Weapons", "NVGs": "Night Vision Goggles",
     "Field Bag": "Field Backpack", "Field pack": "Field Backpack",
     "Yellow Scarred Helmet": "Yellow Scarred Moto Helmet",  
-    "M79": "M79 Grenade Launcher", "Savanna": "CR-550 Savanna",
-    "vihker": "Vikhr", "KA-101": "KA101", "lar": "LAR",
+    "M79": "M79 Grenade Launcher", "Savanna": "CR-550 Savanna","SavannaH": "CR-550 Savanna",
+    "vihker": "Vikhr", "vihkr": "Vikhr", "KA-101": "KA101", "lar": "LAR",
     "nails": "Nail Box", "bolts": "Bolts (stack of 5)", "9v": "9V Battery"
 }
 
