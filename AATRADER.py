@@ -225,6 +225,7 @@ ALIASES = {
     "prn": "Pen",
     "ptn": "Pen",
     "pencil": "Pen",
+    "Box nail": "Nail Box",
 }
 
 # --- HELPERS ---
@@ -554,3 +555,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
