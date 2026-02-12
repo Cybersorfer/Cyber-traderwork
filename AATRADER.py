@@ -114,18 +114,21 @@ ALIASES = {
     ".22 box": ".22 LR Ammo Box",
     ".22lr": ".22 LR Ammo Box",
     "5.56": "5.56x45 Ammo Box",
+    "5.56 ammo": "5.56x45 Ammo Box",
     "5.56mm": "5.56x45 Ammo Box",
     "5,56": "5.56x45 Ammo Box",
     "5,56x45": "5.56x45 Ammo Box",
+    "5.56x45 ammo": "5.56x45 Ammo Box",
     "5.56x45mm": "5.56x45 Ammo Box",
     "5.56x45 mm": "5.56x45 Ammo Box",
     "5.45": "5.45x39 Ammo Box",
-    "5.45ammo": "5.45x39 Ammo Box",
+    "5.45 ammo": "5.45x39 Ammo Box",
     "5,45": "5.45x39 Ammo Box",
     "5,45x39": "5.45x39 Ammo Box",
     "5.45x39 mm": "5.45x39 Ammo Box",
     "5.45x39mm": "5.45x39 Ammo Box",
     "7.62x39": "7.62x39 Ammo Box",
+    "7.62 ammo": "7.62x39 Ammo Box",
     "7.62x39mm": "7.62x39 Ammo Box",
     "7.62x39 mm": "7.62x39 Ammo Box",
     "7,62x39": "7.62x39 Ammo Box",
@@ -134,6 +137,7 @@ ALIASES = {
     "win ammo": ".308 WIN Ammo Box",
     "308": ".308 WIN Ammo Box",
     ".308": ".308 WIN Ammo Box",
+    ".308 ammo": ".308 WIN Ammo Box",
     "357": ".357 Ammo Box",
     ".357": ".357 Ammo Box",
     "12g": "12ga Ammo Box",
@@ -567,6 +571,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
