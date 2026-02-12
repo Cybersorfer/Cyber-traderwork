@@ -356,22 +356,25 @@ def save_all_promos(data):
     with open(PROMO_FILE, 'w') as f: json.dump(data, f)
 
 def clean_line_noise(line):
-    # --- FIX: Remove prices (e.g., $5,000) first ---
-    # This prevents the comma in "$5,000" from incorrectly splitting the line later
+    # 1. Remove prices first (e.g. $5,000)
     line = re.sub(r'\$\s?[\d,]+', '', line)
 
+    # 2. Remove "Locker Code" patterns (HANDLES ALL COLORS)
+    # This checks for (Blue OR Red OR Green...) then "Locker Code" then digits
+    line = re.sub(r'((blue|red|green|yellow|camo|orange)\s*)?locker\s*code\s*\d*', '', line, flags=re.IGNORECASE)
+
     line = line.replace(":", " ")
-    # Added getting, grab, dropping, etc. to noise.
-    # NOTE: "can" is purposely NOT added to noise to avoid breaking "Unknown Food Can"
+    
+    # 3. Standard noise words
     noise_words = [
         "box of", "boxes of", "pack of", "can of", " with ", 
         "getting", "grab", "grabbing", "dropping", "drop off",
-        " get ", " i "
+        " get ", " and ", " i "
     ]
     for noise in noise_words: 
-        # Case insensitive removal
         pattern = re.compile(re.escape(noise), re.IGNORECASE)
         line = pattern.sub(" ", line)
+        
     return line
 
 def clear_state():
