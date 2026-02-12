@@ -226,6 +226,16 @@ ALIASES = {
     "ptn": "Pen",
     "pencil": "Pen",
     "Box nail": "Nail Box",
+    "Wheels": "Car Wheels",
+    "tires": "Car Wheels",
+    "Olga Wheels": "Car Wheels",
+    "gunter Wheels": "Car Wheels",
+    "ADA Wheels": "Car Wheels",
+    "sarka Wheels": "Car Wheels",
+    "humvee Wheels": "Car Wheels",
+    "truck Wheels": "Car Wheels",
+    "M3S Wheels": "Car Wheels",
+    "M1025 Wheels": "Car Wheels",
 }
 
 # --- HELPERS ---
@@ -555,4 +565,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
