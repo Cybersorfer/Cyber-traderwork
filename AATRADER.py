@@ -520,7 +520,7 @@ def main():
 
     # --- TIME DISPLAY ---
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🕒 AAPVE SERVER TIME")
+    st.sidebar.markdown("### 🕒 AAPVE SERVER TZ")
 
     # 3. SERVER TIME (PST) - Python Side
     pst_zone = pytz.timezone('US/Pacific')
@@ -564,7 +564,7 @@ def main():
         </style>
     </head>
     <body>
-        <div id="label">Browser Time</div>
+        <div id="label">Device Time</div>
         <div id="clock">--:--</div>
         <script>
             function updateClock() {
@@ -692,6 +692,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
