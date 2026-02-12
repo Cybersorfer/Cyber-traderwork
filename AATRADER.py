@@ -444,10 +444,13 @@ def set_theme():
             border: 1px solid #4CAF50; 
             caret-color: #00FF00;
         }
+        /* Hide the default date picker icon color to match theme */
         div[data-baseweb="input"] { background-color: #1E1E1E !important; border-color: #4CAF50 !important; }
         div[data-baseweb="select"] > div { background-color: #1E1E1E !important; color: #00FF00 !important; border-color: #4CAF50 !important; }
         .stButton>button { color: #FAFAFA; background-color: #262730; border: 1px solid #4CAF50; transition: all 0.3s ease; }
         .stButton>button:hover { background-color: #4CAF50; color: #000000; box-shadow: 0 0 10px #4CAF50; }
+        
+        /* Table Styling */
         table { color: #E0E0E0 !important; background-color: transparent !important; border-collapse: collapse; width: 100%; }
         thead tr th { background-color: #262730 !important; color: #00FF00 !important; border-bottom: 2px solid #4CAF50 !important; }
         tbody tr { border-bottom: 1px solid #333 !important; }
@@ -463,24 +466,86 @@ def main():
     st.sidebar.title("🌍 Map Selector")
     selected_map = st.sidebar.selectbox("Select Server Map:", list(MAPS.keys()))
     
-    # Load Promo Data
-    all_promos = {m: {"active": False, "name": "", "price": 0} for m in MAPS}
+    # --- LOAD PROMO DATA ---
+    # Default structure now includes 'end_date'
+    all_promos = {m: {"active": False, "name": "", "price": 0, "end_date": str(date.today())} for m in MAPS}
     if os.path.exists(PROMO_FILE):
         try: 
-            with open(PROMO_FILE, 'r') as f: all_promos.update(json.load(f))
+            with open(PROMO_FILE, 'r') as f: 
+                loaded_data = json.load(f)
+                # Merge loaded data with defaults to ensure 'end_date' exists if file is old
+                for m in MAPS:
+                    if m in loaded_data:
+                        all_promos[m].update(loaded_data[m])
         except: pass
     
-    map_promo = all_promos.get(selected_map, {"active": False, "name": "", "price": 0})
+    map_promo = all_promos.get(selected_map, {"active": False, "name": "", "price": 0, "end_date": str(date.today())})
+
+    # --- SIDEBAR PROMO UI ---
     st.sidebar.header(f"🔥 {selected_map} Promo")
-    p_active = st.sidebar.checkbox("Enable Special Price", value=map_promo['active'])
-    p_name = st.sidebar.text_input("Item Name", value=map_promo['name'])
-    p_price = st.sidebar.number_input("Special Price", value=int(map_promo['price']))
+    p_active = st.sidebar.checkbox("Enable Special Price", value=map_promo.get('active', False))
+    p_name = st.sidebar.text_input("Item Name", value=map_promo.get('name', ''))
     
+    # 1. PRICE INPUT (Switched to Text Input to remove +/- buttons)
+    price_val = map_promo.get('price', 0)
+    p_price_str = st.sidebar.text_input("Special Price", value=str(price_val))
+    
+    # Validate Price is a number
+    try:
+        p_price = int(p_price_str)
+    except ValueError:
+        st.sidebar.error("Price must be a number!")
+        p_price = 0
+
+    # 2. DATE PICKER
+    # Convert string back to date object for the widget
+    try:
+        current_date_obj = datetime.strptime(map_promo.get('end_date', str(date.today())), "%Y-%m-%d").date()
+    except:
+        current_date_obj = date.today()
+        
+    p_date = st.sidebar.date_input("Offer Ends On", value=current_date_obj)
+
     if st.sidebar.button("🔄 Update Promo"):
-        all_promos[selected_map] = {"active": p_active, "name": p_name, "price": p_price}
+        # Save date as string
+        all_promos[selected_map] = {
+            "active": p_active, 
+            "name": p_name, 
+            "price": p_price,
+            "end_date": str(p_date)
+        }
         with open(PROMO_FILE, 'w') as f: json.dump(all_promos, f)
         st.rerun()
 
+    # --- TIME DISPLAY ---
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🕒 Global Time")
+
+    # 3. SERVER TIME (PST) - Python Side
+    pst_zone = pytz.timezone('US/Pacific')
+    pst_now = datetime.now(pst_zone).strftime("%I:%M %p")
+    st.sidebar.metric("🇺🇸 Server Time (PST)", pst_now)
+
+    # 4. LOCAL TIME (User) - JavaScript Side
+    # Python cannot see the user's browser time, so we inject a tiny JS clock.
+    st.sidebar.markdown("""
+    <div style="background-color: #1E1E1E; padding: 10px; border-radius: 5px; border: 1px solid #4CAF50; text-align: center;">
+        <p style="color: #B0B0B0; font-size: 0.8rem; margin-bottom: 5px; font-weight:bold;">🏠 Your Local Time</p>
+        <div id="local_clock" style="color: #4CAF50; font-size: 1.8rem; font-weight: bold; font-family: monospace;">--:--</div>
+    </div>
+    <script>
+    function updateClock() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        document.getElementById('local_clock').innerHTML = timeString;
+    }
+    // Update immediately and then every second
+    updateClock();
+    setInterval(updateClock, 1000);
+    </script>
+    """, unsafe_allow_html=True)
+
+    # --- MAIN APP LOGIC ---
     # Load Prices
     try:
         with open(MAPS[selected_map], 'r') as f: data = json.load(f)
@@ -495,6 +560,7 @@ def main():
     if 'missing_df' not in st.session_state: st.session_state.missing_df = pd.DataFrame()
 
     if st.button("🚀 Process Ticket"):
+        # Pass the date to the processor if you want to use it later, currently just passes promo info
         p, c, m = process_text_block(input_text, WE_BUY, WE_SELL, all_promos[selected_map])
         st.session_state.buy_df, st.session_state.sell_df, st.session_state.missing_df = pd.DataFrame(p), pd.DataFrame(c), pd.DataFrame(m)
 
@@ -587,6 +653,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
