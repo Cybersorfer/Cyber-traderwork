@@ -328,6 +328,10 @@ def save_all_promos(data):
     with open(PROMO_FILE, 'w') as f: json.dump(data, f)
 
 def clean_line_noise(line):
+    # --- FIX: Remove prices (e.g., $5,000) first ---
+    # This prevents the comma in "$5,000" from incorrectly splitting the line later
+    line = re.sub(r'\$\s?[\d,]+', '', line)
+
     line = line.replace(":", " ")
     # Added getting, grab, dropping, etc. to noise.
     # NOTE: "can" is purposely NOT added to noise to avoid breaking "Unknown Food Can"
