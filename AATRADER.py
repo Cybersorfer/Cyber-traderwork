@@ -319,13 +319,21 @@ def extract_from_chunk(text, search_index):
 
 def check_mode_switch(line):
     line_lower = line.lower()
+    
     # Cost (We Sell) keywords
-    # Removed "can" to prevent conflict with "Unknown Food Can"
-    if any(kw in line_lower for kw in ["buying", "wtb", "buy", "order", "getting", "get", "grab", "grabbing"]): 
-        return "COST", "buy"
+    # Ordered by length (longest first) to match "buying" before "buy"
+    cost_keywords = ["buying", "wtb", "order", "getting", "grabbing", "grab", "get", "buy"]
+    for kw in cost_keywords:
+        if kw in line_lower:
+            return "COST", kw
+            
     # Payout (We Buy) keywords
-    if any(kw in line_lower for kw in ["selling", "wts", "have", "sell", "dropping", "drop off"]): 
-        return "PAYOUT", "sell"
+    # Ordered by length (longest first) to match "selling" before "sell"
+    payout_keywords = ["selling", "wts", "dropping", "drop off", "have", "sell"]
+    for kw in payout_keywords:
+        if kw in line_lower:
+            return "PAYOUT", kw
+            
     return None, None
 
 def load_prices(map_name):
@@ -571,7 +579,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
