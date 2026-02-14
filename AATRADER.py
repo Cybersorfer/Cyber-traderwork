@@ -209,8 +209,10 @@ ALIASES = {
     # --- DRUGS / WEED ---
     "weed crate full": "wooden crate full of weed(50 dried buds)",
     "weed crate": "wooden crate full of weed(50 dried buds)",
+    "weed crates": "wooden crate full of weed(50 dried buds)",
     "weed wooden crate": "wooden crate full of weed(50 dried buds)",
     "crate of weed": "wooden crate full of weed(50 dried buds)",
+    "crates of weed": "wooden crate full of weed(50 dried buds)",
     "crate full of weed": "wooden crate full of weed(50 dried buds)",
     "seachest full of weed": "seachest full of weed(100 dried buds)",
     "sea chest full of weed": "seachest full of weed(100 dried buds)",
@@ -692,6 +694,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
