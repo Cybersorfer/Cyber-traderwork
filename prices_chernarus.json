@@ -53,11 +53,11 @@
     "Punch Card": 5000
   },
   "TRADER_SELLS": {
-    "Leather Kit": 2000,
+    "Leather Kit": 2000, "Leather repair": 2000,
     "Sewing Kit": 2000,
     "Leather Sewing Kit": 2000,
     "Duct Tape": 2000,
-    "Sharpening Stone": 2000,
+    "Sharpening Stone": 2000,  "whetstone": 2000,
     "Electronic Repair Kit": 4000,
     "Epoxy": 3000,
     "Epoxy Putty": 3000,
@@ -207,7 +207,7 @@
     "USG-45 25rd Mag": 3000,
     "VAIGA 20rd Drum Mag": 4000,
     "Coupled 30rd Mag": 8000,
-    "Standard 60rd Mag": 6000,
+    "Standard 60rd Mag": 6000,"60rd standard mag": 6000,
     "AUR 30rd Mag": 6000,
     "KA101/KA74/KAM 30/45rd Mag": 6000,
     "KAM 75rd Drum Mag": 15000,
